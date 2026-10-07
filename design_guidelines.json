@@ -1,0 +1,300 @@
+{
+  "project_name": "JARVIS AI OS — Personal Autonomous Command Center",
+  "theme": "dark",
+  "archetype": "ELECTRIC_CYBER_COMMAND_CENTER",
+  "emotional_tone": "Cinematic, razor-sharp, ultra-responsive futuristic command center with warm personal companion empathy",
+  "colors": {
+    "surfaces": [
+      {
+        "name": "page",
+        "kind": "solid",
+        "bg": "#060A14",
+        "on_bg": "#E2E8F0",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "link": "#38BDF8",
+          "error": "#F87171",
+          "success": "#34D399",
+          "warning": "#FBBF24",
+          "cyan_glow": "#00F0FF",
+          "electric_blue": "#0070F3"
+        }
+      },
+      {
+        "name": "command_header",
+        "kind": "glass",
+        "contrast_against": "#0A1124",
+        "guarantee": "backdrop-blur-xl bg-[#060A14]/85 border-b border-cyan-500/20 shadow-[0_4px_24px_rgba(0,240,255,0.06)]",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "status_active": "#22C55E",
+          "pulse_ring": "#00F0FF"
+        }
+      },
+      {
+        "name": "sidebar_nav",
+        "kind": "glass",
+        "contrast_against": "#080E1E",
+        "guarantee": "backdrop-blur-xl bg-[#080E1E]/90 border-r border-cyan-500/15 shadow-2xl",
+        "on_bg": "#E2E8F0",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "active_tab": "#00F0FF",
+          "active_tab_bg": "rgba(0,240,255,0.12)",
+          "hover_tab_bg": "rgba(255,255,255,0.04)"
+        }
+      },
+      {
+        "name": "panel_glass",
+        "kind": "glass",
+        "contrast_against": "#0B1528",
+        "guarantee": "backdrop-blur-lg bg-[#0B1528]/75 border border-cyan-500/20 shadow-[0_8px_32px_rgba(0,0,0,0.5)]",
+        "on_bg": "#F1F5F9",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "border_glow": "rgba(0,240,255,0.3)",
+          "terminal_cyan": "#00F0FF",
+          "amber_accent": "#F59E0B"
+        }
+      },
+      {
+        "name": "orb_stage",
+        "kind": "gradient",
+        "contrast_against": "#040711",
+        "guarantee": "radial-gradient(circle at center, rgba(0,240,255,0.15) 0%, rgba(6,10,20,0.95) 70%, #060A14 100%)",
+        "on_bg": "#FFFFFF",
+        "on_bg_muted": "#A5F3FC",
+        "roles": {
+          "orb_core": "#00F0FF",
+          "orb_secondary": "#3B82F6",
+          "orb_halo": "#06B6D4"
+        }
+      },
+      {
+        "name": "metric_card",
+        "kind": "glass",
+        "contrast_against": "#0D1B33",
+        "guarantee": "backdrop-blur-md bg-[#0D1B33]/65 border border-cyan-400/25 shadow-lg",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8"
+      },
+      {
+        "name": "terminal_screen",
+        "kind": "solid",
+        "bg": "#020617",
+        "on_bg": "#38BDF8",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "prompt": "#00F0FF",
+          "stdout": "#E2E8F0",
+          "stderr": "#EF4444",
+          "success": "#10B981"
+        }
+      },
+      {
+        "name": "chat_user_bubble",
+        "kind": "glass",
+        "contrast_against": "#1E293B",
+        "guarantee": "bg-cyan-950/40 border border-cyan-500/30 text-cyan-100",
+        "on_bg": "#E0F2FE",
+        "on_bg_muted": "#7DD3FC"
+      },
+      {
+        "name": "chat_agent_bubble",
+        "kind": "glass",
+        "contrast_against": "#0F172A",
+        "guarantee": "bg-[#0F172A]/85 border border-blue-500/25 text-slate-100 shadow-md",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8"
+      }
+    ],
+    "accent": "#00F0FF",
+    "on_accent": "#020617",
+    "palette": {
+      "void_black": "#060A14",
+      "deep_navy": "#0B1528",
+      "slate_glass": "#0D1B33",
+      "terminal_bg": "#020617",
+      "cyan_primary": "#00F0FF",
+      "electric_blue": "#0070F3",
+      "neon_teal": "#14B8A6",
+      "signal_green": "#22C55E",
+      "warning_amber": "#F59E0B",
+      "alert_red": "#EF4444",
+      "text_bright": "#F8FAFC",
+      "text_normal": "#E2E8F0",
+      "text_muted": "#94A3B8"
+    }
+  },
+  "typography": {
+    "font_family_heading": "'Sora Variable', sans-serif",
+    "font_family_body": "'DM Sans Variable', sans-serif",
+    "font_family_mono": "'JetBrains Mono Variable', monospace",
+    "css_font_import": "@import \"@fontsource-variable/sora\";\n@import \"@fontsource-variable/dm-sans\";\n@import \"@fontsource-variable/jetbrains-mono\";",
+    "scale_px": {
+      "display": 56,
+      "h1": 42,
+      "h2": 32,
+      "h3": 22,
+      "body": 15,
+      "caption": 13
+    },
+    "rules": {
+      "headings": "font-heading font-bold tracking-tight text-slate-100 drop-shadow-[0_2px_12px_rgba(0,240,255,0.15)]",
+      "subheadings": "font-heading font-medium tracking-normal text-slate-300",
+      "mono_labels": "font-mono text-xs uppercase tracking-[0.18em] text-cyan-400",
+      "body": "font-sans leading-relaxed text-slate-200"
+    }
+  },
+  "entry_surfaces": {
+    "/": "cinematic desktop command center: top live telemetry metrics bar, left dynamic 6-module navigation sidebar, center reactive glowing multi-state JARVIS Orb with voice waveform + interactive chat & visual feed, right contextual multi-panel grid for real-time task outputs, flights, terminal, and briefing summaries"
+  },
+  "visual_enhancers": {
+    "grid_background": "subtle futuristic grid lines via svg overlay with radial fade, 40px grid size, opacity 0.08",
+    "particle_canvas": "lightweight floating cyber particle mesh on center orb zone and background canvas",
+    "scanlines": "subtle 2px linear-gradient scanline overlay on terminal & telemetry monitors",
+    "glass_blur": "backdrop-blur-xl combined with border-cyan-500/20 and soft inner cyan highlight box-shadow",
+    "audio_reactive_glow": "Web Audio API analyser connected to microphone and TTS audio element modulating orb scale (1.0 to 1.35) and box-shadow glow intensity"
+  },
+  "jarvis_orb_spec": {
+    "states": {
+      "IDLE": {
+        "description": "Faint pulse (1.8s ease-in-out), slow 360deg ring rotation (12s linear), subtle cyan/navy shifting core, light particle drift",
+        "core_color": "#00F0FF",
+        "glow_radius": "0 0 45px rgba(0, 240, 255, 0.35)",
+        "rotation_speed_sec": 12
+      },
+      "LISTENING": {
+        "description": "Dynamic ripple waves expanding outward synced with microphone volume level, inner concentric rings reacting to voice frequencies",
+        "core_color": "#38BDF8",
+        "glow_radius": "0 0 70px rgba(56, 189, 248, 0.65)",
+        "rotation_speed_sec": 6
+      },
+      "THINKING": {
+        "description": "Accelerated counter-rotations (1.5s), energetic core condensation, pulsing cyan-blue particle flare",
+        "core_color": "#0070F3",
+        "glow_radius": "0 0 85px rgba(0, 112, 243, 0.75)",
+        "rotation_speed_sec": 2
+      },
+      "SPEAKING": {
+        "description": "Outward pulsating concentric shockwaves synchronized to Edge-TTS / Web Speech output audio amplitude, smoothly returning to IDLE when speech ends",
+        "core_color": "#00F0FF",
+        "glow_radius": "0 0 90px rgba(0, 240, 255, 0.8)",
+        "rotation_speed_sec": 4
+      }
+    }
+  },
+  "agent_architecture": [
+    {
+      "id": "companion_vision",
+      "name": "Companion & Vision Agent",
+      "tr_name": "Sohbet & Görsel Analiz",
+      "badge_color": "bg-cyan-500/20 text-cyan-300 border-cyan-500/40",
+      "capabilities": ["Doğal Türkçe sesli/yazılı sohbet", "Ekran görüntüsü ve hata logu görsel analizi", "Empatik ve samimi dost modu"]
+    },
+    {
+      "id": "web_browser",
+      "name": "Web & Browser Agent",
+      "tr_name": "Web & Bilet Ajanı",
+      "badge_color": "bg-blue-500/20 text-blue-300 border-blue-500/40",
+      "capabilities": ["Otonom web araştırması", "Uçak bileti & fiyat karşılaştırma tabloları", "Fırsat ve veri tarama"]
+    },
+    {
+      "id": "media_os",
+      "name": "Media & OS Controller",
+      "tr_name": "Medya & Sistem Yönetimi",
+      "badge_color": "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+      "capabilities": ["YouTube şarkı çalma/durdurma", "Ses seviyesi ayarlama", "Sekme ve sistem optimizasyonu"]
+    },
+    {
+      "id": "dev_core",
+      "name": "Dev Core Agent",
+      "tr_name": "Projeler & Kodlama",
+      "badge_color": "bg-violet-500/20 text-violet-300 border-violet-500/40",
+      "capabilities": ["Kod yazma, mimari kurgulama", "Hata ayıklama (debug)", "Terminal komut yürütme & onay"]
+    },
+    {
+      "id": "research_study",
+      "name": "Research & Study Agent",
+      "tr_name": "Araştırma & Notlar",
+      "badge_color": "bg-amber-500/20 text-amber-300 border-amber-500/40",
+      "capabilities": ["Hap özetler & teknik dokümantasyon", "Ders ve sınav takibi", "Akademik sentez"]
+    },
+    {
+      "id": "executive_briefing",
+      "name": "Executive Briefing Agent",
+      "tr_name": "Günlük Brief & Rapor",
+      "badge_color": "bg-rose-500/20 text-rose-300 border-rose-500/40",
+      "capabilities": ["Günün aktivite log dökümü", "Otomatik tek sayfa gün sonu raporu", "Öncelikli görev ve teslim takibi"]
+    }
+  ],
+  "layout_and_navigation": {
+    "structure": "Desktop Command Center (100vh full-bleed viewport with overflow containment)",
+    "regions": {
+      "top_metric_bar": {
+        "height": "64px",
+        "widgets": [
+          "JARVIS Core Status (Online / Quantum Sync)",
+          "Aktif Projeler & Ders Durumu (Live count & progress)",
+          "Arka Plan Görevleri (Otonom Workers running)",
+          "Son Web Taraması (En uygun bilet/fırsat ticker)",
+          "Sistem Kaynakları (CPU %24, RAM 6.2/16GB, Ağ 142Mbps)",
+          "Sesli Asistan Toggle & Master Ses Kontrolü"
+        ]
+      },
+      "left_sidebar": {
+        "width": "260px",
+        "items": [
+          {"id": "command_center", "label": "Komuta Merkezi", "icon": "Orbit"},
+          {"id": "companion_chat", "label": "Sohbet & Görsel", "icon": "MessageSquareShare"},
+          {"id": "dev_projects", "label": "Projeler & Kodlama", "icon": "Code2"},
+          {"id": "terminal_console", "label": "Terminal & Konsol", "icon": "Terminal"},
+          {"id": "web_flights", "label": "Web & Bilet Ajanı", "icon": "Compass"},
+          {"id": "research_notes", "label": "Araştırma Notları", "icon": "BookOpenCheck"},
+          {"id": "daily_brief", "label": "Günlük Brief & Rapor", "icon": "FileText"},
+          {"id": "system_settings", "label": "Sistem Ayarları", "icon": "Sliders"}
+        ]
+      },
+      "center_stage": {
+        "description": "Multi-mode central interactive hub containing the primary large JARVIS Orb, dynamic waveform frequency visualizer, quick voice prompt chips, and integrated multimodal orchestrator feed",
+        "interaction_modes": ["Orb Focus Mode", "Multimodal Split Mode", "Expanded Terminal Mode", "Flight Matrix Mode"]
+      },
+      "right_panels": {
+        "width": "360px to 420px",
+        "components": [
+          "Yaklaşan Teslimler & Görevler (Ders & Proje deadline radar)",
+          "Otonom İşlem Sonuçları (YouTube Medya Oynatıcı, Bilet Özet Kartı, Canlı Kod Yaması)",
+          "Günün Canlı Log Dökümü (Gerçek zamanlı olay akışı)"
+        ]
+      }
+    }
+  },
+  "motion": {
+    "reduced_motion_fallback": "All spinning rings and waveform transforms degrade gracefully to opacity fades if prefers-reduced-motion is enabled",
+    "spring_transition": "type: 'spring', damping: 25, stiffness: 200",
+    "hover_lift": "transform: translateY(-2px), transition: transform 0.15s ease, border-color 0.15s ease",
+    "orb_animations": {
+      "pulse": "keyframes jarvisPulse { 0%, 100% { transform: scale(1); filter: drop-shadow(0 0 35px rgba(0,240,255,0.4)); } 50% { transform: scale(1.06); filter: drop-shadow(0 0 65px rgba(0,240,255,0.7)); } }",
+      "ring_spin": "keyframes spinClockwise { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }",
+      "ring_counter_spin": "keyframes spinCounterClockwise { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }"
+    }
+  },
+  "accessibility": {
+    "wcag_level": "WCAG AA (4.5:1 minimum on all body copy against dark surfaces)",
+    "aria_roles": "All live console updates use aria-live='polite', audio toggle has explicit aria-pressed, voice recording button has aria-label in Turkish",
+    "data_testid_convention": "Strict kebab-case role-based testids on all actionable controls and live metrics (e.g. data-testid='voice-mic-button', data-testid='jarvis-orb-container', data-testid='agent-badge-companion')"
+  },
+  "instructions_to_main_agent": [
+    "1. THEME & ATMOSPHERE: Build a deep dark navy/void black (#060A14) cinematic command center with electric cyan (#00F0FF) and neon blue accents. Use glassmorphism cards with fine glowing borders (border-cyan-500/20) and subtle grid/particle canvas.",
+    "2. TURKISH UI LANGUAGE: Ensure 100% of the UI copy, agent responses, prompts, and tooltips are natural, friendly yet senior-engineer grade Turkish (as requested in rule 5: samimi ve dostça dertleşme, üst düzey mühendis ciddiyetinde iş yapma).",
+    "3. CENTRAL JARVIS ORB: Build a breathtaking multi-ring SVG / Canvas + Framer Motion interactive Orb with 4 reactive states (IDLE, LISTENING, THINKING, SPEAKING). Integrate Web Speech API (tr-TR) and audio waveform synthesis so the Orb genuinely reacts to voice and speech audio playback.",
+    "4. MULTIMODAL & VISION: Support image file upload (screenshot, error logs) with simulated computer vision analysis displaying detected code line, highlighted bug, and direct fix patch.",
+    "5. 6 SPECIALIZED AGENTS: Clearly render agent routing badges on all chat stream messages (Companion & Vision, Web & Browser, Media & OS, Dev Core, Research & Study, Executive Briefing).",
+    "6. FLIGHT & WEB SCANNER: Render ticket search results as a crisp comparative matrix table showing Airlines (THY, Pegasus, SunExpress), Departure/Arrival times, durations, prices in TRY/EUR, and instant book/save actions.",
+    "7. MEDIA & SYSTEM CONTROLLER: Embed a functional YouTube music player interface with live play/pause, volume slider, track title, and background audio simulation.",
+    "8. TERMINAL & CONSOLE: Build a sandboxed interactive terminal executing real shell commands or simulated safe developer scripts with clear destructive-action confirmation dialogs.",
+    "9. BRIEFING & DAILY REPORT: Provide an automated end-of-day summary generator ('Gün Sonu Raporu Çıkar') synthesizing completed tasks, commits, notes, and music played.",
+    "10. TESTING COMPLIANCE: Place data-testid attributes on every button, input, toggle, metric tile, and modal dialog."
+  ]
+}

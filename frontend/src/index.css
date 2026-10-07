@@ -1,0 +1,229 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/dm-sans";
+@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/sora";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-sans: 'DM Sans Variable', sans-serif;
+    --font-heading: 'Sora Variable', sans-serif;
+    --font-mono: 'JetBrains Mono Variable', monospace;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --color-jarvis-cyan: #00f0ff;
+    --color-jarvis-blue: #0070f3;
+    --color-jarvis-void: #060a14;
+    --color-jarvis-navy: #0b1528;
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+    --animate-orb-drift: orbDrift 9s ease-in-out infinite;
+    --animate-ring-spin: ringSpin 14s linear infinite;
+    --animate-ring-counter: ringCounter 18s linear infinite;
+    --animate-shock: shockwave 2.4s ease-out infinite;
+    --animate-scan: scanSweep 7s linear infinite;
+    --animate-flicker: flicker 4s ease-in-out infinite;
+    --animate-rise: rise 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* JARVIS runs dark-only: the command-center palette lives directly in :root. */
+:root {
+    --radius: 0.75rem;
+    --background: #060a14;
+    --foreground: #e2e8f0;
+    --card: #0b1528;
+    --card-foreground: #f1f5f9;
+    --popover: #0b1528;
+    --popover-foreground: #f1f5f9;
+    --primary: #00f0ff;
+    --primary-foreground: #020617;
+    --secondary: #14233d;
+    --secondary-foreground: #e2e8f0;
+    --muted: #122039;
+    --muted-foreground: #94a3b8;
+    --accent: #0d2440;
+    --accent-foreground: #a5f3fc;
+    --destructive: #ef4444;
+    --border: rgba(0, 240, 255, 0.18);
+    --input: rgba(0, 240, 255, 0.22);
+    --ring: rgba(0, 240, 255, 0.55);
+    --chart-1: #00f0ff;
+    --chart-2: #0070f3;
+    --chart-3: #14b8a6;
+    --chart-4: #f59e0b;
+    --chart-5: #a78bfa;
+    --sidebar: #080e1e;
+    --sidebar-foreground: #e2e8f0;
+    --sidebar-primary: #00f0ff;
+    --sidebar-primary-foreground: #020617;
+    --sidebar-accent: rgba(0, 240, 255, 0.12);
+    --sidebar-accent-foreground: #a5f3fc;
+    --sidebar-border: rgba(0, 240, 255, 0.15);
+    --sidebar-ring: rgba(0, 240, 255, 0.5);
+}
+
+.dark {
+    --background: #060a14;
+    --foreground: #e2e8f0;
+    --card: #0b1528;
+    --card-foreground: #f1f5f9;
+    --popover: #0b1528;
+    --popover-foreground: #f1f5f9;
+    --primary: #00f0ff;
+    --primary-foreground: #020617;
+    --secondary: #14233d;
+    --secondary-foreground: #e2e8f0;
+    --muted: #122039;
+    --muted-foreground: #94a3b8;
+    --accent: #0d2440;
+    --accent-foreground: #a5f3fc;
+    --destructive: #ef4444;
+    --border: rgba(0, 240, 255, 0.18);
+    --input: rgba(0, 240, 255, 0.22);
+    --ring: rgba(0, 240, 255, 0.55);
+    --sidebar: #080e1e;
+    --sidebar-foreground: #e2e8f0;
+    --sidebar-primary: #00f0ff;
+    --sidebar-primary-foreground: #020617;
+    --sidebar-accent: rgba(0, 240, 255, 0.12);
+    --sidebar-accent-foreground: #a5f3fc;
+    --sidebar-border: rgba(0, 240, 255, 0.15);
+    --sidebar-ring: rgba(0, 240, 255, 0.5);
+}
+
+@keyframes orbDrift {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+    50% { transform: translate3d(0, -8px, 0) scale(1.03); }
+}
+
+@keyframes ringSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes ringCounter {
+    from { transform: rotate(360deg); }
+    to { transform: rotate(0deg); }
+}
+
+@keyframes shockwave {
+    0% { transform: scale(0.72); opacity: 0.75; }
+    100% { transform: scale(1.75); opacity: 0; }
+}
+
+@keyframes scanSweep {
+    0% { transform: translateY(-100%); opacity: 0; }
+    12% { opacity: 0.5; }
+    88% { opacity: 0.5; }
+    100% { transform: translateY(1200%); opacity: 0; }
+}
+
+@keyframes flicker {
+    0%, 100% { opacity: 0.55; }
+    43% { opacity: 0.95; }
+    47% { opacity: 0.4; }
+}
+
+@keyframes rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+  h1, h2, h3, h4 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.015em;
+    }
+}
+
+@layer utilities {
+    /* Glassmorphism command panel with a fine glowing edge. */
+    .glass-panel {
+        background: color-mix(in srgb, #0b1528 76%, transparent);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(0, 240, 255, 0.18);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(0, 240, 255, 0.08);
+    }
+    .glass-soft {
+        background: color-mix(in srgb, #0d1b33 62%, transparent);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(0, 240, 255, 0.14);
+    }
+    .mono-label {
+        font-family: var(--font-mono);
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        color: #38bdf8;
+    }
+    .grid-backdrop {
+        background-image:
+            linear-gradient(rgba(0, 240, 255, 0.055) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 240, 255, 0.055) 1px, transparent 1px);
+        background-size: 44px 44px;
+    }
+    .cyan-text-glow {
+        text-shadow: 0 0 18px rgba(0, 240, 255, 0.45);
+    }
+    .thin-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0, 240, 255, 0.3) transparent;
+    }
+    .thin-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .thin-scroll::-webkit-scrollbar-thumb {
+        background: rgba(0, 240, 255, 0.28);
+        border-radius: 999px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}
