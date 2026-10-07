@@ -10,7 +10,19 @@ Desktop-first cinematic command center. No auth, no login — single local user.
 - Live web: Gemini **googleSearch grounding** (keyless). DuckDuckGo HTML scraping is
   blocked by anti-bot (202) in this pod — do not reintroduce it.
 - TTS: **Edge-TTS `tr-TR-AhmetNeural`** → `POST /api/voice/speak` returns mp3.
-  Frontend falls back to browser Web Speech synthesis if that call fails.
+  Playback is **two-path and must stay that way**:
+  1. `decodeAudioData` → `AudioBufferSourceNode` → analyser → destination, only after an
+     awaited `ctx.resume()` with `ctx.state === "running"`. Gives the orb real amplitude.
+  2. Fallback: a plain `<audio>` element that is **never connected to the audio graph**,
+     with a synthetic orb envelope.
+  3. Last resort: browser `speechSynthesis`.
+  NEVER call `createMediaElementSource` on the TTS element. Doing so removes the element's
+  default speaker output and routes it through the AudioContext; whenever that context is
+  suspended (routinely — it gets created around the mic meter) the reply is completely
+  INAUDIBLE even though `fetch` returns 200, `play()` resolves and `onended` fires, and the
+  orb animates. Caching that node made the silence permanent. That was the reported
+  "JARVIS konuşmuyor" bug. Regression guard: assert `createMediaElementSource` is called
+  zero times and that `data-orb-state` stays `speaking` for seconds, not milliseconds.
 - STT: browser Web Speech API, `lang=tr-TR` (Chrome/Edge only; unsupported browsers get a
   clear Turkish message and the typed path still works).
 - Frontend: Vite + React 19 + Tailwind v4. Fonts Sora / DM Sans / JetBrains Mono.

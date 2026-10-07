@@ -432,6 +432,27 @@ async def dispatch(name: str, args: dict) -> dict:
 
 
 # ------------------------------------------------------------------ orchestrator
+def friendly_llm_error(exc: Exception) -> str:
+    """Turn a provider exception into a Turkish message that names the real cause."""
+    raw = str(exc)
+    low = raw.lower()
+    if "budget" in low or "ratelimit" in low or "rate limit" in low or "429" in low:
+        return (
+            "JARVIS'in beyni (Gemini) şu an yanıt veremiyor: Emergent LLM anahtarının "
+            "kredi/bütçe limiti dolmuş. Emergent panelinden kredi yükleyince sohbet, görsel "
+            "analizi ve raporlar anında çalışmaya devam eder. Sesli okuma, terminal, medya ve "
+            "commit izleme bundan etkilenmez; onlar çalışmaya devam ediyor."
+        )
+    if "api key" in low or "unauthorized" in low or "401" in low:
+        return (
+            "JARVIS'in beyni yanıt veremedi: EMERGENT_LLM_KEY geçersiz görünüyor. "
+            "backend/.env içindeki anahtarı kontrol et."
+        )
+    if "timeout" in low or "timed out" in low:
+        return "Beyin zaman aşımına uğradı. Bir kez daha dener misin?"
+    return f"JARVIS çekirdeği yanıt veremedi: {raw[:200]}"
+
+
 async def orchestrate(session_id: str, text: str, image_base64: Optional[str] = None) -> dict:
     """One full turn: route to sub-agents, execute for real, narrate back in Turkish."""
     settings = await db.settings.find_one({"key": "settings"}) or {}

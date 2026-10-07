@@ -1,0 +1,64 @@
+{
+  "iteration": 1,
+  "passed": 8,
+  "failed": 0,
+  "bugs": [],
+  "action_items": [
+    {
+      "note": "Acceptance matrix has 7 criteria; produced 8 artifacts total (6 browser checks + 2 backend tests) since criterion 2 (voice/speak TTS) needed a dedicated backend test in addition to being exercised indirectly by the browser audio-instrumentation check.",
+      "severity": "info"
+    }
+  ],
+  "retest_needed": false,
+  "checks": [
+    {
+      "criterion": "USER-REPORTED BUG: JARVIS replies in text but produces no audible speech (createMediaElementSource regression). Orb must stay 'speaking' for several seconds via decodeAudioData + AudioBufferSourceNode, twice in a row.",
+      "name": "jarvis-voice-speak-works",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Settings > voice test clicked twice. Both times data-orb-state went idle->speaking->idle with duration ~8.5s (8601ms, 8521ms). Web Audio instrumentation: createMediaElementSourceCalls=0 (regression guard), decodeAudioDataCalls=2, startCalls=2. No TTS failure text in error-banner."
+    },
+    {
+      "criterion": "POST /api/voice/speak returns real Turkish Edge-TTS audio",
+      "name": "test_tscheck_voice_speak.py",
+      "lane": "backend",
+      "status": "passed",
+      "evidence": "POST /api/voice/speak {text: 'Merhaba, ses testi.'} -> 200, content-type audio/mpeg, body > 5000 bytes (confirmed via curl: real mp3 bytes streamed). POST with empty text -> 422. pytest: 2 passed in 0.92s."
+    },
+    {
+      "criterion": "Mic button enters listening on the FIRST click (previously needed ~3 clicks)",
+      "name": "mic-first-click-listening",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Fake SpeechRecognition installed that throws on a second concurrent start(). voice-mic-button click -> data-orb-state='listening' immediately, repeated for 3 turns, each single click. Final liveCount=1, instancesCreated=1 (one engine reused throughout, as designed)."
+    },
+    {
+      "criterion": "Wake word 'Hey Jarvis' switches into command mode and the dictated command reaches the backend",
+      "name": "wake-word-triggers-chat-post",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Fake SpeechRecognition emits interim 'hey jarvis' -> orb listening; final 'muzigi ac' -> POST /api/chat (stubbed via page.route) body.text containing 'muzigi ac'. One-breath 'hey jarvis terminalden ls calistir' -> POST body.text === 'terminalden ls calistir' (wake word stripped)."
+    },
+    {
+      "criterion": "Rapid clicking the mic button must never wedge the speech engine",
+      "name": "mic-rapid-click-no-wedge",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "12 rapid clicks on voice-mic-button; fake engine's liveCount stayed <=1 (final liveCount=1, instancesCreated=1), zero page errors, and a subsequent 'hey jarvis' emission still transitioned orb to 'listening'."
+    },
+    {
+      "criterion": "Non-LLM surfaces still work end to end (terminal, metrics, notifications)",
+      "name": "non-llm-surfaces-work",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "metric-cpu/metric-ram show real numeric values (e.g. '%13.6', '12.44 / 31.29 GB'), not dashes. notification-bell opens notification-panel. terminal: 'echo JARVIS_OK_<ts>' shows marker in terminal-output; 'rm -rf /tmp/x' opens terminal-confirm-dialog instead of executing (cancelled, not run). Re-verified on public preview URL."
+    },
+    {
+      "criterion": "A failed LLM turn degrades gracefully instead of crashing or throwing an unhandled rejection",
+      "name": "chat-llm-failure-graceful",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Sent chat-input message without stubbing /api/chat (real backend, real 502 from exhausted LLM budget). error-banner appeared with Turkish text mentioning 'kredi/bütçe limiti dolmuş'. Navigated to terminal panel afterwards — still interactive. Zero unhandled pageerror events."
+    }
+  ]
+}

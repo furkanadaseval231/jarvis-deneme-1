@@ -156,7 +156,7 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number | null>(null);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
-  const ttsSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const bufferSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const sendRef = useRef<((t: string) => void) | null>(null);
 
   const voiceSupported = useMemo(() => getRecognitionCtor() !== null, []);
@@ -222,6 +222,15 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
 
   // ----------------------------------------------------------------- speech out
   const stopSpeaking = useCallback(() => {
+    if (bufferSourceRef.current) {
+      try {
+        bufferSourceRef.current.onended = null;
+        bufferSourceRef.current.stop();
+      } catch {
+        /* already finished */
+      }
+      bufferSourceRef.current = null;
+    }
     if (audioElRef.current) {
       audioElRef.current.pause();
       audioElRef.current.currentTime = 0;
@@ -230,6 +239,108 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
     stopMeter();
     setOrbState("idle");
   }, [stopMeter]);
+
+  // Animate the orb from a soft synthetic envelope when no analyser is available.
+  const runEnvelope = useCallback(() => {
+    const start = performance.now();
+    const tick = () => {
+      const t = (performance.now() - start) / 1000;
+      setLevel(0.32 + 0.3 * Math.abs(Math.sin(t * 6.4)) + 0.12 * Math.abs(Math.sin(t * 2.3)));
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  // PATH A — decode the mp3 and play it through Web Audio, which gives the orb a real
+  // amplitude signal. Returns false (playing nothing) if the context cannot be resumed,
+  // so the caller can fall back. Never connect the <audio> element to the graph instead:
+  // doing so removes its default speaker output, and a suspended context then makes the
+  // reply completely silent while play() still resolves — the exact "JARVIS won't speak"
+  // bug this replaced.
+  const playThroughGraph = useCallback(
+    async (bytes: ArrayBuffer): Promise<boolean> => {
+      let ctx: AudioContext;
+      try {
+        ctx = ensureAudioCtx();
+        await ctx.resume();
+      } catch {
+        return false;
+      }
+      if (ctx.state !== "running") return false;
+
+      let buffer: AudioBuffer;
+      try {
+        buffer = await ctx.decodeAudioData(bytes.slice(0));
+      } catch {
+        return false;
+      }
+
+      const src = ctx.createBufferSource();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      src.buffer = buffer;
+      src.connect(analyser);
+      analyser.connect(ctx.destination);
+      analyserRef.current = analyser;
+      bufferSourceRef.current = src;
+
+      setOrbState("speaking");
+      runMeter();
+      await new Promise<void>((resolve) => {
+        src.onended = () => resolve();
+        try {
+          src.start();
+        } catch {
+          resolve();
+        }
+      });
+      bufferSourceRef.current = null;
+      stopMeter();
+      setOrbState("idle");
+      return true;
+    },
+    [ensureAudioCtx, runMeter, stopMeter],
+  );
+
+  // PATH B — a plain <audio> element, deliberately NOT wired into the audio graph, so it
+  // reaches the speakers even when Web Audio is suspended or blocked.
+  const playThroughElement = useCallback(
+    async (bytes: ArrayBuffer): Promise<boolean> => {
+      if (!audioElRef.current) audioElRef.current = new Audio();
+      const el = audioElRef.current;
+      const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
+      el.src = url;
+      el.volume = 1;
+      el.muted = false;
+
+      setOrbState("speaking");
+      runEnvelope();
+
+      let started = false;
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          URL.revokeObjectURL(url);
+          resolve();
+        };
+        el.onended = done;
+        el.onerror = done;
+        void el
+          .play()
+          .then(() => {
+            started = true;
+          })
+          .catch(done);
+      });
+
+      stopMeter();
+      setOrbState("idle");
+      return started;
+    },
+    [runEnvelope, stopMeter],
+  );
 
   const browserSpeak = useCallback(
     (text: string) =>
@@ -246,13 +357,7 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
         const trVoice = window.speechSynthesis.getVoices().find((v) => v.lang.startsWith("tr"));
         if (trVoice) utter.voice = trVoice;
         setOrbState("speaking");
-        const start = performance.now();
-        const fake = () => {
-          const t = (performance.now() - start) / 1000;
-          setLevel(0.35 + 0.28 * Math.abs(Math.sin(t * 6.2)) + 0.12 * Math.abs(Math.sin(t * 2.1)));
-          rafRef.current = requestAnimationFrame(fake);
-        };
-        rafRef.current = requestAnimationFrame(fake);
+        runEnvelope();
         const finish = () => {
           stopMeter();
           setOrbState("idle");
@@ -262,7 +367,7 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
         utter.onerror = finish;
         window.speechSynthesis.speak(utter);
       }),
-    [stopMeter],
+    [runEnvelope, stopMeter],
   );
 
   const speak = useCallback(
@@ -271,6 +376,8 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
       if (!clean) return;
       if (settings && !settings.voice_enabled) return;
 
+      stopSpeaking();
+
       try {
         const res = await fetch("/api/voice/speak", {
           method: "POST",
@@ -278,53 +385,22 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ text: clean, voice: settings?.voice ?? "tr-TR-AhmetNeural" }),
         });
         if (!res.ok) throw new Error(`TTS ${res.status}`);
-        const blob = await res.blob();
-        if (blob.size < 512) throw new Error("boş ses");
+        const bytes = await res.arrayBuffer();
+        if (bytes.byteLength < 512) throw new Error("boş ses");
 
-        const url = URL.createObjectURL(blob);
-        if (!audioElRef.current) {
-          audioElRef.current = new Audio();
-          audioElRef.current.crossOrigin = "anonymous";
-        }
-        const el = audioElRef.current;
-        el.src = url;
-        el.volume = 1;
-
-        try {
-          const ctx = ensureAudioCtx();
-          if (!ttsSourceRef.current) {
-            ttsSourceRef.current = ctx.createMediaElementSource(el);
-            const analyser = ctx.createAnalyser();
-            analyser.fftSize = 256;
-            ttsSourceRef.current.connect(analyser);
-            analyser.connect(ctx.destination);
-            analyserRef.current = analyser;
-          }
-        } catch {
-          /* analyser is cosmetic — never block playback on it */
-        }
-
-        await new Promise<void>((resolve) => {
-          const done = () => {
-            URL.revokeObjectURL(url);
-            stopMeter();
-            setOrbState("idle");
-            resolve();
-          };
-          el.onended = done;
-          el.onerror = done;
-          setOrbState("speaking");
-          runMeter();
-          void el.play().catch(() => done());
-        });
+        // Real amplitude first; plain element playback if Web Audio is unavailable.
+        if (await playThroughGraph(bytes)) return;
+        if (await playThroughElement(bytes)) return;
+        throw new Error("tarayıcı sesi çalamadı");
       } catch (err) {
+        const reason = err instanceof Error ? err.message : "bilinmeyen";
         setLastError(
-          `Edge-TTS sesi alınamadı (${err instanceof Error ? err.message : "bilinmeyen"}), tarayıcı sesine geçtim.`,
+          `Edge-TTS sesi çalınamadı (${reason}), tarayıcının kendi sesine geçtim. Ses hâlâ gelmiyorsa sekmenin sesi kapalı olabilir.`,
         );
         await browserSpeak(clean);
       }
     },
-    [browserSpeak, ensureAudioCtx, runMeter, settings, stopMeter],
+    [browserSpeak, playThroughElement, playThroughGraph, settings, stopSpeaking],
   );
 
   // ----------------------------------------------------------------- orchestrator
@@ -371,7 +447,8 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
       const message = detail || "JARVIS çekirdeğine ulaşamadım. Ağ bağlantını kontrol et.";
       setLastError(message);
       toast.error("Bağlantı sorunu", { description: message });
-      void browserSpeak("Bir sorun çıktı. " + message);
+      // Speak a short line, not the whole technical message.
+      void browserSpeak("Bir sorun çıktı, ekrandaki nota bakar mısın?");
     },
   });
 
@@ -379,7 +456,12 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
     async (text: string, imageBase64?: string | null) => {
       if (!text.trim() && !imageBase64) return;
       setTranscript("");
-      await mutation.mutateAsync({ text, image: imageBase64 ?? null });
+      try {
+        await mutation.mutateAsync({ text, image: imageBase64 ?? null });
+      } catch {
+        // onError already raises the toast and the banner; swallow so a failed turn
+        // never surfaces as an unhandled promise rejection.
+      }
     },
     [mutation],
   );

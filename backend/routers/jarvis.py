@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from lib.activity import clean, log_activity
-from lib.brain import orchestrate
+from lib.brain import friendly_llm_error, orchestrate
 from lib.db import db
 from models.schemas import ChatMessage, ChatRequest, ChatResponse, SpeakRequest
 
@@ -31,10 +31,7 @@ async def chat(req: ChatRequest):
         result = await orchestrate(req.session_id, req.text, req.image_base64)
     except Exception as exc:
         logger.exception("orchestrate failed")
-        raise HTTPException(
-            status_code=502,
-            detail=f"JARVIS çekirdeği yanıt veremedi: {exc}. Ağ bağlantısını ve EMERGENT_LLM_KEY değerini kontrol et.",
-        ) from exc
+        raise HTTPException(status_code=502, detail=friendly_llm_error(exc)) from exc
 
     reply = ChatMessage(
         session_id=req.session_id, role="assistant", content=result["reply"],
