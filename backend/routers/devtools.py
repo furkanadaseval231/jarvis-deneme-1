@@ -17,6 +17,7 @@ from lib.brain import MODEL, PROVIDER, api_key
 from lib.dates import today_iso
 from lib.db import db
 from lib.devtools import PatchError, apply_patch, build_proposal, scan_commits
+from lib.usage import record_usage
 from models.schemas import (
     Briefing,
     CommitScanResult,
@@ -177,6 +178,7 @@ async def build_morning_brief() -> Briefing:
             if isinstance(ev, TextDelta):
                 buf += ev.content
             elif isinstance(ev, StreamDone):
+                await record_usage(MODEL, ev.usage, "morning_brief")
                 break
         report = buf.strip()
     except Exception as exc:

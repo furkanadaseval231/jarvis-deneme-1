@@ -40,6 +40,8 @@ class ChatMessage(BaseModel):
     agent: AgentId = "companion_vision"
     has_image: bool = False
     actions: list[AgentAction] = Field(default_factory=list)
+    model: str = ""
+    model_reason: str = ""
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -236,6 +238,10 @@ class Settings(BaseModel):
     wake_word_enabled: bool = False
     morning_brief_enabled: bool = True
     commit_watch_enabled: bool = True
+    model_mode: Literal["auto", "economy", "quality"] = "auto"
+    economy_model: str = "gemini-2.5-flash"
+    quality_model: str = "gemini-3.1-pro-preview"
+    credit_cap: float = 1.0
     watch_dirs: list[str] = Field(default_factory=lambda: ["/app"])
     rules: str = ""
 
@@ -248,8 +254,42 @@ class SettingsUpdate(BaseModel):
     wake_word_enabled: Optional[bool] = None
     morning_brief_enabled: Optional[bool] = None
     commit_watch_enabled: Optional[bool] = None
+    model_mode: Optional[Literal["auto", "economy", "quality"]] = None
+    economy_model: Optional[str] = None
+    quality_model: Optional[str] = None
+    credit_cap: Optional[float] = None
     watch_dirs: Optional[list[str]] = None
     rules: Optional[str] = None
+
+
+# ---------------------------------------------------------------- llm spend
+class ModelSpend(BaseModel):
+    model: str
+    cost: float
+    calls: int
+
+
+class UsageSummary(BaseModel):
+    spent: float
+    cap: float
+    remaining: float
+    percent: float
+    state: Literal["ok", "warn", "critical", "exceeded"]
+    exhausted: bool
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    today_spent: float
+    today_calls: int
+    per_model: list[ModelSpend] = Field(default_factory=list)
+
+
+class ModelOption(BaseModel):
+    id: str
+    label: str
+    tier: Literal["economy", "quality"]
+    input_price: float
+    output_price: float
 
 
 # ---------------------------------------------------------------- code patches

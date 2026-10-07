@@ -1,8 +1,8 @@
 // Settings: persona name, Turkish voice selection, auto-speak, watched folders, rules.
 
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2, Save, Volume2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Coins, Loader2, RotateCcw, Save, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -198,6 +198,158 @@ export default function SettingsPanel() {
               </span>
             </span>
           </label>
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-amber-500/25 bg-[#050b17]/60 p-3">
+          <div className="flex items-center gap-2">
+            <Coins size={14} className="text-amber-400" />
+            <span className="mono-label text-amber-400">MODEL POLİTİKASI & KREDİ</span>
+          </div>
+          <p className="text-[0.7rem] leading-relaxed text-slate-500">
+            Flash modeli Pro'dan yaklaşık 7 kat ucuz. Basit sohbetleri ona yönlendirmek
+            kredini çok daha uzun süre idare ettirir; görsel analizi ve araç gerektiren
+            teknik işler otomatik olarak kaliteli modelde kalır.
+          </p>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-slate-300">Model seçimi</Label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(
+                [
+                  { id: "auto", label: "Otomatik", hint: "önerilen" },
+                  { id: "economy", label: "Ekonomi", hint: "en ucuz" },
+                  { id: "quality", label: "Kalite", hint: "en iyi" },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setDraft({ ...draft, model_mode: opt.id })}
+                  data-selected={draft.model_mode === opt.id ? "true" : undefined}
+                  className={`rounded-lg border px-2 py-2 text-center transition-[background-color,border-color] duration-150 ${
+                    draft.model_mode === opt.id
+                      ? "border-amber-400/60 bg-amber-500/15 text-amber-100"
+                      : "border-white/[0.08] text-slate-400 hover:bg-white/[0.04]"
+                  }`}
+                  data-testid={`settings-model-mode-${opt.id}`}
+                >
+                  <span className="block text-xs font-semibold">{opt.label}</span>
+                  <span className="block text-[0.6rem] text-slate-500">{opt.hint}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-[0.68rem] text-slate-500">
+              {draft.model_mode === "auto"
+                ? "Basit sohbet → Flash, teknik iş ve görsel → Pro. Dengeli seçim."
+                : draft.model_mode === "economy"
+                  ? "Her şey Flash'ta — görsel analizi hariç, o kalitede kalır."
+                  : "Her şey Pro'da. En iyi sonuç, en hızlı kredi tüketimi."}
+            </p>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-300">Ekonomi modeli</Label>
+              <Select
+                value={draft.economy_model}
+                onValueChange={(value: string) => setDraft({ ...draft, economy_model: value })}
+              >
+                <SelectTrigger
+                  className="border-cyan-500/20 bg-[#050b17] text-xs"
+                  data-testid="settings-economy-model"
+                >
+                  <SelectValue>{(v) => String(v ?? draft.economy_model)}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {(models ?? [])
+                    .filter((m) => m.tier === "economy")
+                    .map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-300">Kaliteli model</Label>
+              <Select
+                value={draft.quality_model}
+                onValueChange={(value: string) => setDraft({ ...draft, quality_model: value })}
+              >
+                <SelectTrigger
+                  className="border-cyan-500/20 bg-[#050b17] text-xs"
+                  data-testid="settings-quality-model"
+                >
+                  <SelectValue>{(v) => String(v ?? draft.quality_model)}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {(models ?? [])
+                    .filter((m) => m.tier === "quality")
+                    .map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {models && models.length > 0 && (
+            <div className="rounded-lg border border-white/[0.07] bg-black/20 p-2">
+              <div className="mono-label mb-1">1 MİLYON TOKEN FİYATI (KREDİ)</div>
+              {models.map((m) => (
+                <div
+                  key={m.id}
+                  className="flex items-center justify-between py-0.5 text-[0.68rem]"
+                  data-testid={`model-price-${m.id}`}
+                >
+                  <span className="truncate font-mono text-slate-400">{m.id}</span>
+                  <span className="ml-2 shrink-0 font-mono text-slate-200">
+                    girdi {m.input_price.toFixed(2)} · çıktı {m.output_price.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="credit-cap" className="text-xs text-slate-300">
+              Kredi sınırı (göstergenin tabanı)
+            </Label>
+            <Input
+              id="credit-cap"
+              type="number"
+              step="0.5"
+              min="0.1"
+              value={draft.credit_cap}
+              onChange={(e) =>
+                setDraft({ ...draft, credit_cap: Number(e.target.value) || draft.credit_cap })
+              }
+              className="border-cyan-500/20 bg-[#050b17] font-mono text-xs"
+              data-testid="settings-credit-cap"
+            />
+            <p className="text-[0.68rem] text-slate-500">
+              Emergent panelindeki Universal Key bakiyenle aynı sayıyı gir; gösterge buna göre
+              uyarır.
+            </p>
+          </div>
+
+          <Button
+            variant="outline"
+            onClick={() => resetUsage.mutate()}
+            disabled={resetUsage.isPending}
+            className="w-full gap-2 border-amber-500/40 text-amber-200 hover:bg-amber-500/10"
+            data-testid="settings-reset-usage"
+          >
+            {resetUsage.isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <RotateCcw size={14} />
+            )}
+            Kredi sayacını sıfırla (yükleme sonrası)
+          </Button>
         </div>
 
         <div className="space-y-1.5">

@@ -24,12 +24,19 @@ from lib.activity import log_activity
 from lib.dates import today_iso
 from lib.db import db
 from lib.shell import run_command, scan_workspace
+from lib.usage import (
+    ECONOMY_MODEL,
+    QUALITY_MODEL,
+    choose_model,
+    mark_exhausted,
+    record_usage,
+)
 from lib.web import youtube_search
 
 logger = logging.getLogger(__name__)
 
 PROVIDER = "gemini"
-MODEL = "gemini-3.1-pro-preview"
+MODEL = QUALITY_MODEL
 
 
 def api_key() -> str:
@@ -237,6 +244,7 @@ async def grounded_search(query: str, kind: str = "search") -> dict:
         if isinstance(ev, TextDelta):
             buf += ev.content
         elif isinstance(ev, StreamDone):
+            await record_usage(MODEL, ev.usage, f"search:{kind}", grounded=True)
             break
 
     rows = _extract_json_array(buf)
@@ -453,6 +461,11 @@ def friendly_llm_error(exc: Exception) -> str:
     return f"JARVIS çekirdeği yanıt veremedi: {raw[:200]}"
 
 
+def is_budget_error(exc: Exception) -> bool:
+    low = str(exc).lower()
+    return "budget" in low or "ratelimit" in low or "rate limit" in low or "429" in low
+
+
 async def orchestrate(session_id: str, text: str, image_base64: Optional[str] = None) -> dict:
     """One full turn: route to sub-agents, execute for real, narrate back in Turkish."""
     settings = await db.settings.find_one({"key": "settings"}) or {}
@@ -461,9 +474,13 @@ async def orchestrate(session_id: str, text: str, image_base64: Optional[str] = 
         user_name=settings.get("user_name", "Patron"), today=today_iso(), memory=memory
     )
 
+    # Economy policy: simple chat goes to the cheap Flash tier, anything needing tools,
+    # vision or real reasoning gets the Pro tier. Keeps credits alive far longer.
+    model, model_reason = choose_model(text, bool(image_base64), settings)
+
     chat = (
         LlmChat(api_key=api_key(), session_id=f"{session_id}-{today_iso()}", system_message=system)
-        .with_model(PROVIDER, MODEL)
+        .with_model(PROVIDER, model)
         .with_tools(TOOLS, tool_choice="auto")
     )
 
@@ -479,6 +496,7 @@ async def orchestrate(session_id: str, text: str, image_base64: Optional[str] = 
     reply = ""
     actions: list[dict] = []
     guard = 0
+    escalated = False
 
     while guard < 5:
         guard += 1
@@ -489,9 +507,14 @@ async def orchestrate(session_id: str, text: str, image_base64: Optional[str] = 
             elif isinstance(ev, ToolCallReady):
                 pending.append(ev.tool_call)
             elif isinstance(ev, StreamDone):
+                await record_usage(model, ev.usage, "chat")
                 break
         if not pending:
             break
+        # The cheap model asked for a tool, which means this turn is doing real work:
+        # finish it on the quality model so tool arguments and narration stay reliable.
+        if model != settings.get("quality_model", QUALITY_MODEL) and model == ECONOMY_MODEL:
+            escalated = True
         for tc in pending:
             args = tc.arguments if isinstance(tc.arguments, dict) else {}
             result = await dispatch(tc.name, args)
@@ -504,5 +527,12 @@ async def orchestrate(session_id: str, text: str, image_base64: Optional[str] = 
     if image_base64 and not actions:
         agent_id = "companion_vision"
 
-    return {"reply": reply.strip() or "Yanıt üretemedim, tekrar dener misin?",
-            "agent": agent_id, "actions": actions}
+    await mark_exhausted(False)
+
+    return {
+        "reply": reply.strip() or "Yanıt üretemedim, tekrar dener misin?",
+        "agent": agent_id,
+        "actions": actions,
+        "model": model,
+        "model_reason": model_reason + (" · araç kullandı" if escalated else ""),
+    }

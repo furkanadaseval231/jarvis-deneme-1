@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Activity, Cpu, Globe2, HardDrive, Layers, Mic, MicOff, Volume2, VolumeX } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import CreditGauge from "@/components/CreditGauge";
 import NotificationBell from "@/components/NotificationBell";
 import { apiGet } from "@/lib/api";
 import { useJarvis } from "@/lib/jarvis";
@@ -132,6 +133,7 @@ export default function MetricBar() {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        <CreditGauge />
         {wakeArmed && (
           <span
             className="hidden items-center gap-1.5 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-2.5 py-1 md:flex"

@@ -8,9 +8,22 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from lib.activity import clean, log_activity
-from lib.brain import friendly_llm_error, orchestrate
+from lib.brain import friendly_llm_error, is_budget_error, orchestrate
 from lib.db import db
-from models.schemas import ChatMessage, ChatRequest, ChatResponse, SpeakRequest
+from lib.usage import (
+    SELECTABLE_MODELS,
+    mark_exhausted,
+    price_for,
+    summary as usage_summary,
+)
+from models.schemas import (
+    ChatMessage,
+    ChatRequest,
+    ChatResponse,
+    ModelOption,
+    SpeakRequest,
+    UsageSummary,
+)
 
 router = APIRouter(tags=["jarvis"])
 logger = logging.getLogger(__name__)
@@ -31,11 +44,14 @@ async def chat(req: ChatRequest):
         result = await orchestrate(req.session_id, req.text, req.image_base64)
     except Exception as exc:
         logger.exception("orchestrate failed")
+        if is_budget_error(exc):
+            await mark_exhausted(True)
         raise HTTPException(status_code=502, detail=friendly_llm_error(exc)) from exc
 
     reply = ChatMessage(
         session_id=req.session_id, role="assistant", content=result["reply"],
         agent=result["agent"], actions=result["actions"],
+        model=result.get("model", ""), model_reason=result.get("model_reason", ""),
     )
     await db.messages.insert_one(reply.model_dump())
     await log_activity(
@@ -97,6 +113,33 @@ async def speak(req: SpeakRequest):
         media_type="audio/mpeg",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/usage", response_model=UsageSummary)
+async def llm_usage():
+    """Credit gauge: real token spend this app has caused, against the user's cap."""
+    return UsageSummary(**await usage_summary())
+
+
+@router.get("/usage/models", response_model=list[ModelOption])
+async def llm_models():
+    """Selectable Gemini models with their per-million-token credit prices."""
+    out = []
+    for spec in SELECTABLE_MODELS:
+        inp, outp = price_for(spec["id"])
+        out.append(ModelOption(
+            id=spec["id"], label=spec["label"], tier=spec["tier"],
+            input_price=inp, output_price=outp,
+        ))
+    return out
+
+
+@router.post("/usage/reset", response_model=UsageSummary)
+async def reset_usage():
+    """Zero the local meter — use after topping the key up on the Emergent panel."""
+    await db.llm_usage.delete_many({})
+    await mark_exhausted(False)
+    return UsageSummary(**await usage_summary())
 
 
 @router.get("/voice/voices")

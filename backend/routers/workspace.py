@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 
 from lib.activity import clean, log_activity, today_activities
 from lib.brain import MODEL, PROVIDER, api_key
+from lib.usage import record_usage
 from lib.dates import today_iso
 from lib.db import db
 from models.schemas import (
@@ -154,6 +155,7 @@ async def research(body: ResearchRequest):
             if isinstance(ev, TextDelta):
                 buf += ev.content
             elif isinstance(ev, StreamDone):
+                await record_usage(MODEL, ev.usage, "research", grounded=True)
                 break
     except Exception as exc:
         logger.exception("research failed")
@@ -236,6 +238,7 @@ async def generate_briefing():
             if isinstance(ev, TextDelta):
                 buf += ev.content
             elif isinstance(ev, StreamDone):
+                await record_usage(MODEL, ev.usage, "briefing")
                 break
         report = buf.strip()
     except Exception as exc:

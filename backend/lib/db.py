@@ -58,6 +58,11 @@ INDEXES: dict[str, list[IndexModel]] = {
     ],
     "repo_state": [IndexModel([("path", ASCENDING)], name="path", unique=True)],
     "cron_runs": [IndexModel([("key", ASCENDING)], name="key", unique=True)],
+    "llm_usage": [
+        IndexModel([("day", ASCENDING), ("created_at", DESCENDING)], name="day_created"),
+        IndexModel([("model", ASCENDING)], name="model"),
+    ],
+    "llm_state": [IndexModel([("key", ASCENDING)], name="key", unique=True)],
 }
 
 

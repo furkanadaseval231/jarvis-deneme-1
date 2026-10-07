@@ -24,6 +24,8 @@ export interface ChatMessage {
   agent: AgentId;
   has_image: boolean;
   actions: AgentAction[];
+  model: string;
+  model_reason: string;
   created_at: string;
 }
 
@@ -150,8 +152,41 @@ export interface Settings {
   wake_word_enabled: boolean;
   morning_brief_enabled: boolean;
   commit_watch_enabled: boolean;
+  model_mode: "auto" | "economy" | "quality";
+  economy_model: string;
+  quality_model: string;
+  credit_cap: number;
   watch_dirs: string[];
   rules: string;
+}
+
+export interface ModelSpend {
+  model: string;
+  cost: number;
+  calls: number;
+}
+
+export interface UsageSummary {
+  spent: number;
+  cap: number;
+  remaining: number;
+  percent: number;
+  state: "ok" | "warn" | "critical" | "exceeded";
+  exhausted: boolean;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  today_spent: number;
+  today_calls: number;
+  per_model: ModelSpend[];
+}
+
+export interface ModelOption {
+  id: string;
+  label: string;
+  tier: "economy" | "quality";
+  input_price: number;
+  output_price: number;
 }
 
 export interface Patch {
