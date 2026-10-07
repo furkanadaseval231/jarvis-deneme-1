@@ -2,6 +2,16 @@
 // JARVIS nervous system: Turkish speech-in (Web Speech API), orchestrator call,
 // Turkish speech-out (Edge-TTS mp3 with a browser-voice fallback), and the live
 // audio amplitude that drives the Orb. One provider so voice works from any panel.
+//
+// SPEECH ENGINE DESIGN — read before changing:
+// A browser allows exactly ONE live SpeechRecognition instance. Running a separate
+// wake-word recogniser alongside the command recogniser made start() fail silently, so
+// the mic button needed several clicks and the wake word never fired. There is therefore
+// ONE engine here, switched between modes by `modeRef`:
+//   off     — not running
+//   wake    — listening only for "Hey Jarvis"
+//   command — transcribing an actual command, auto-submitted after a short silence
+// Switching wake → command is just a flag change: no restart, no race, instant response.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -12,6 +22,7 @@ import { ApiError, apiPost } from "@/lib/api";
 import type { ChatResponse, Settings, Track } from "@/lib/types";
 
 export type OrbState = "idle" | "listening" | "thinking" | "speaking";
+type EngineMode = "off" | "wake" | "command";
 
 interface SpeechResultLike {
   isFinal: boolean;
@@ -22,18 +33,23 @@ interface RecognitionLike {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
+  maxAlternatives?: number;
   start: () => void;
   stop: () => void;
   abort?: () => void;
   onresult: ((e: { resultIndex: number; results: ArrayLike<SpeechResultLike> }) => void) | null;
   onerror: ((e: { error: string }) => void) | null;
   onend: (() => void) | null;
+  onstart?: (() => void) | null;
 }
 
 type RecognitionCtor = new () => RecognitionLike;
 
-// Turkish ASR spells the wake word many ways: jarvis / carvis / çarvis / jervis / jarvıs.
-const WAKE_PATTERN = /\b(?:hey|hay|ey|hei)?\s*[jcçg][ae]rv[iı]ss?\b/i;
+// Turkish ASR writes the wake word many ways and often splits it ("jar vis", "car wiz").
+// Matching runs on a space-collapsed copy so every spelling lands, while the spaced form
+// is kept for slicing the command that follows.
+const WAKE_COLLAPSED = /(?:hey|hay|ey|hei|hay)?\s*(?:[jcçg][ae]rv[iıe]s|[jcçg]arw[iı]s|[jcçg]arv[iı]z|[jcçg]arves)/i;
+const WAKE_SPACED = /\b(?:hey|hay|ey|hei)?\s*[jcçg]\s?[ae]\s?r\s?[vwy]\s?[iıe]\s?[szd]?\b/i;
 
 function normalizeSpeech(text: string): string {
   return text
@@ -44,16 +60,23 @@ function normalizeSpeech(text: string): string {
 }
 
 export function matchesWakeWord(text: string): boolean {
-  return WAKE_PATTERN.test(normalizeSpeech(text));
+  const normalized = normalizeSpeech(text);
+  if (WAKE_COLLAPSED.test(normalized.replace(/\s+/g, ""))) return true;
+  return WAKE_SPACED.test(normalized);
 }
 
 // Everything after the wake word is treated as the command, so "Hey Jarvis müziği aç"
 // works in one breath instead of needing a second turn.
 export function stripWakeWord(text: string): string {
   const normalized = normalizeSpeech(text);
-  const match = WAKE_PATTERN.exec(normalized);
-  if (!match) return normalized;
-  return normalized.slice(match.index + match[0].length).trim();
+  const spaced = WAKE_SPACED.exec(normalized);
+  if (spaced) return normalized.slice(spaced.index + spaced[0].length).trim();
+  // Collapsed match only: drop everything up to the last token that looks like the name.
+  const words = normalized.split(" ");
+  for (let i = words.length - 1; i >= 0; i -= 1) {
+    if (WAKE_COLLAPSED.test(words[i])) return words.slice(i + 1).join(" ").trim();
+  }
+  return "";
 }
 
 function getRecognitionCtor(): RecognitionCtor | null {
@@ -99,6 +122,9 @@ export function useJarvis(): JarvisContextValue {
 }
 
 const SESSION_ID = "default";
+// How long to wait after speech stops before treating the command as finished.
+const SILENCE_AFTER_FINAL_MS = 900;
+const SILENCE_AFTER_INTERIM_MS = 1800;
 
 export function JarvisProvider({ children }: { children: ReactNode }) {
   const [orbState, setOrbState] = useState<OrbState>("idle");
@@ -114,9 +140,17 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
   const [volume, setVolume] = useState(70);
 
   const queryClient = useQueryClient();
-  const recognitionRef = useRef<RecognitionLike | null>(null);
-  const wakeRecRef = useRef<RecognitionLike | null>(null);
-  const wakeWantedRef = useRef(false);
+
+  // --- speech engine refs (single instance, mode-switched) ---
+  const engineRef = useRef<RecognitionLike | null>(null);
+  const modeRef = useRef<EngineMode>("off");
+  const finalRef = useRef("");
+  const silenceRef = useRef<number | null>(null);
+  const wakeEnabledRef = useRef(false);
+  const pausedForSpeechRef = useRef(false);
+  const permissionDeniedRef = useRef(false);
+
+  // --- audio refs ---
   const micStreamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -127,6 +161,7 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
 
   const voiceSupported = useMemo(() => getRecognitionCtor() !== null, []);
 
+  // ----------------------------------------------------------------- meters
   const stopMeter = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
@@ -161,6 +196,30 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
     return audioCtxRef.current;
   }, []);
 
+  const releaseMic = useCallback(() => {
+    micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    micStreamRef.current = null;
+  }, []);
+
+  // The orb's listening ripples come from a real mic analyser. It is cosmetic: if the
+  // browser refuses the stream, recognition still runs and the orb uses a flat level.
+  const acquireMicMeter = useCallback(async () => {
+    if (micStreamRef.current) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
+      const ctx = ensureAudioCtx();
+      const src = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      src.connect(analyser);
+      analyserRef.current = analyser;
+      runMeter();
+    } catch {
+      /* no meter — recognition is unaffected */
+    }
+  }, [ensureAudioCtx, runMeter]);
+
   // ----------------------------------------------------------------- speech out
   const stopSpeaking = useCallback(() => {
     if (audioElRef.current) {
@@ -187,7 +246,6 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
         const trVoice = window.speechSynthesis.getVoices().find((v) => v.lang.startsWith("tr"));
         if (trVoice) utter.voice = trVoice;
         setOrbState("speaking");
-        // No analyser on synthesis output: animate the orb from a soft synthetic envelope.
         const start = performance.now();
         const fake = () => {
           const t = (performance.now() - start) / 1000;
@@ -257,10 +315,7 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
           el.onerror = done;
           setOrbState("speaking");
           runMeter();
-          void el.play().catch(() => {
-            // autoplay blocked before any user gesture — fall back silently
-            done();
-          });
+          void el.play().catch(() => done());
         });
       } catch (err) {
         setLastError(
@@ -285,7 +340,6 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
       setOrbState("thinking");
     },
     onSuccess: async (data) => {
-      // Autonomous side effects the browser owns: start the music the media agent picked.
       for (const action of data.actions) {
         if (action.tool === "muzik_cal") {
           const payload = action.payload as { playing?: Track };
@@ -294,9 +348,7 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
             setPlaying(true);
           }
         }
-        if (action.tool === "muzik_durdur") {
-          setPlaying(false);
-        }
+        if (action.tool === "muzik_durdur") setPlaying(false);
       }
       void queryClient.invalidateQueries({ queryKey: ["chat-history"] });
       void queryClient.invalidateQueries({ queryKey: ["activities"] });
@@ -305,12 +357,10 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
       void queryClient.invalidateQueries({ queryKey: ["notes"] });
       void queryClient.invalidateQueries({ queryKey: ["web-scans"] });
+      void queryClient.invalidateQueries({ queryKey: ["patches"] });
 
-      if (settings?.auto_speak !== false) {
-        await speak(data.reply.content);
-      } else {
-        setOrbState("idle");
-      }
+      if (settings?.auto_speak !== false) await speak(data.reply.content);
+      else setOrbState("idle");
     },
     onError: (err) => {
       setOrbState("idle");
@@ -338,185 +388,250 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
     void send(t);
   };
 
-  // ----------------------------------------------------------------- speech in
-  const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-    micStreamRef.current?.getTracks().forEach((t) => t.stop());
-    micStreamRef.current = null;
-    stopMeter();
-    setListening(false);
-    setOrbState((s) => (s === "listening" ? "idle" : s));
-  }, [stopMeter]);
-
-  const startListening = useCallback(async () => {
-    const Ctor = getRecognitionCtor();
-    if (!Ctor) {
-      const msg =
-        "Tarayıcın Türkçe sesli dinlemeyi (Web Speech API) desteklemiyor. Chrome veya Edge kullan; yazılı komut her zaman çalışır.";
-      setLastError(msg);
-      toast.error("Mikrofon desteklenmiyor", { description: msg });
-      return;
+  // ----------------------------------------------------------------- engine
+  const clearSilence = useCallback(() => {
+    if (silenceRef.current !== null) {
+      window.clearTimeout(silenceRef.current);
+      silenceRef.current = null;
     }
-    stopSpeaking();
+  }, []);
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micStreamRef.current = stream;
-      const ctx = ensureAudioCtx();
-      const src = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      src.connect(analyser);
-      analyserRef.current = analyser;
-      runMeter();
-    } catch {
-      setLastError("Mikrofon izni verilmedi. Tarayıcı adres çubuğundaki mikrofon simgesinden izin ver.");
-      toast.error("Mikrofon izni yok", {
-        description: "Adres çubuğundaki mikrofon simgesinden izin verip tekrar dene.",
-      });
-      return;
-    }
-
-    const rec = new Ctor();
-    rec.lang = "tr-TR";
-    rec.continuous = false;
-    rec.interimResults = true;
-    let finalText = "";
-
-    rec.onresult = (event) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        const res = event.results[i];
-        if (res.isFinal) finalText += res[0].transcript;
-        else interim += res[0].transcript;
-      }
-      setTranscript(finalText || interim);
-    };
-    rec.onerror = (e) => {
-      if (e.error !== "aborted" && e.error !== "no-speech") {
-        setLastError(`Ses algılama hatası: ${e.error}`);
-      }
-    };
-    rec.onend = () => {
-      micStreamRef.current?.getTracks().forEach((t) => t.stop());
-      micStreamRef.current = null;
-      stopMeter();
-      setListening(false);
-      setOrbState("idle");
-      const said = finalText.trim();
-      if (said) sendRef.current?.(said);
-    };
-
-    recognitionRef.current = rec;
-    setListening(true);
-    setOrbState("listening");
-    rec.start();
-  }, [ensureAudioCtx, runMeter, stopMeter, stopSpeaking]);
-
-  const toggleListening = useCallback(() => {
-    if (listening) stopListening();
-    else void startListening();
-  }, [listening, startListening, stopListening]);
-
-  // ----------------------------------------------------------------- wake word
-  // A second, low-stakes recognition stream runs in the background and only reacts to
-  // "Hey Jarvis". It yields the mic entirely while a command turn or TTS playback is
-  // active, so it never competes with the real listener.
-  const stopWake = useCallback(() => {
-    wakeWantedRef.current = false;
-    const rec = wakeRecRef.current;
-    wakeRecRef.current = null;
+  const stopEngine = useCallback(() => {
+    const rec = engineRef.current;
+    engineRef.current = null;
     if (rec) {
+      // Detach handlers first so onend cannot respawn the engine we are killing.
       rec.onend = null;
       rec.onresult = null;
       rec.onerror = null;
+      rec.onstart = null;
       try {
         (rec.abort ?? rec.stop)();
       } catch {
         /* already stopped */
       }
     }
-    setWakeArmed(false);
-    setWakeHeard(false);
   }, []);
 
-  const startWake = useCallback(() => {
+  const enterWake = useCallback(() => {
+    modeRef.current = "wake";
+    finalRef.current = "";
+    clearSilence();
+    releaseMic();
+    stopMeter();
+    setListening(false);
+    setTranscript("");
+    setWakeArmed(true);
+  }, [clearSilence, releaseMic, stopMeter]);
+
+  const enterCommand = useCallback(() => {
+    modeRef.current = "command";
+    finalRef.current = "";
+    clearSilence();
+    setTranscript("");
+    setWakeArmed(false);
+    setListening(true);
+    setOrbState("listening");
+    void acquireMicMeter();
+  }, [acquireMicMeter, clearSilence]);
+
+  const goIdle = useCallback(() => {
+    modeRef.current = "off";
+    finalRef.current = "";
+    clearSilence();
+    releaseMic();
+    stopMeter();
+    stopEngine();
+    setListening(false);
+    setWakeArmed(false);
+    setTranscript("");
+    setOrbState((s) => (s === "listening" ? "idle" : s));
+  }, [clearSilence, releaseMic, stopEngine, stopMeter]);
+
+  const spawnEngine = useCallback(() => {
     const Ctor = getRecognitionCtor();
-    if (!Ctor || wakeRecRef.current) return;
-    wakeWantedRef.current = true;
+    if (!Ctor || engineRef.current || permissionDeniedRef.current) return;
+    if (modeRef.current === "off") return;
 
-    const spawn = () => {
-      if (!wakeWantedRef.current) return;
-      const rec = new Ctor();
-      rec.lang = "tr-TR";
-      rec.continuous = true;
-      rec.interimResults = true;
-      wakeRecRef.current = rec;
+    const rec = new Ctor();
+    rec.lang = "tr-TR";
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
 
-      rec.onresult = (event) => {
-        let heard = "";
-        for (let i = event.resultIndex; i < event.results.length; i += 1) {
-          heard += event.results[i][0].transcript;
-        }
-        if (!matchesWakeWord(heard)) return;
-
-        const command = stripWakeWord(heard);
-        setWakeHeard(true);
-        stopWake();
-        // Trailing words are the command itself; otherwise open a normal listening turn.
-        if (command.length > 2) {
-          setTranscript(command);
-          sendRef.current?.(command);
+    const scheduleSubmit = (ms: number) => {
+      clearSilence();
+      silenceRef.current = window.setTimeout(() => {
+        silenceRef.current = null;
+        if (modeRef.current !== "command") return;
+        const said = finalRef.current.trim();
+        finalRef.current = "";
+        releaseMic();
+        stopMeter();
+        setTranscript("");
+        if (wakeEnabledRef.current) {
+          enterWake();
         } else {
-          void startListening();
+          goIdle();
         }
-      };
+        if (said) sendRef.current?.(said);
+      }, ms);
+    };
 
-      rec.onerror = (e) => {
-        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-          wakeWantedRef.current = false;
-          setLastError(
-            "Uyandırma sözcüğü için mikrofon izni gerekiyor. Adres çubuğundaki mikrofon simgesinden izin ver.",
-          );
+    rec.onresult = (event) => {
+      let interim = "";
+      let finals = "";
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const res = event.results[i];
+        if (res.isFinal) finals += res[0].transcript;
+        else interim += res[0].transcript;
+      }
+
+      if (modeRef.current === "wake") {
+        const heard = `${finals} ${interim}`;
+        if (!matchesWakeWord(heard)) return;
+        const rest = stripWakeWord(heard);
+        setWakeHeard(true);
+        window.setTimeout(() => setWakeHeard(false), 1500);
+        enterCommand();
+        // Words spoken after the name are already the command.
+        if (rest.length > 2) {
+          finalRef.current = rest;
+          setTranscript(rest);
+          scheduleSubmit(SILENCE_AFTER_INTERIM_MS);
         }
-      };
+        return;
+      }
 
-      rec.onend = () => {
-        wakeRecRef.current = null;
-        // Chrome ends a continuous stream every ~60s; respawn to stay armed.
-        if (wakeWantedRef.current) window.setTimeout(spawn, 400);
-      };
-
-      try {
-        rec.start();
-        setWakeArmed(true);
-      } catch {
-        wakeRecRef.current = null;
+      if (modeRef.current === "command") {
+        if (finals) finalRef.current += (finalRef.current ? " " : "") + finals.trim();
+        const shown = `${finalRef.current} ${interim}`.trim();
+        setTranscript(shown);
+        if (finalRef.current || interim) {
+          scheduleSubmit(interim ? SILENCE_AFTER_INTERIM_MS : SILENCE_AFTER_FINAL_MS);
+        }
       }
     };
 
-    spawn();
-  }, [startListening, stopWake]);
+    rec.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        permissionDeniedRef.current = true;
+        setLastError(
+          "Mikrofon izni verilmedi. Adres çubuğundaki mikrofon simgesinden izin verip tekrar dene.",
+        );
+        toast.error("Mikrofon izni yok", {
+          description: "Adres çubuğundaki mikrofon simgesinden izin verip tekrar dene.",
+        });
+        goIdle();
+      }
+      // 'no-speech' / 'aborted' are normal in a long-running stream: onend respawns.
+    };
 
-  useEffect(() => {
-    const enabled = settings?.wake_word_enabled === true;
-    const shouldArm =
-      enabled && voiceSupported && !listening && !mutation.isPending && orbState !== "speaking";
+    rec.onend = () => {
+      engineRef.current = null;
+      // Chrome ends a continuous stream on silence or after ~60s; respawn to stay live.
+      if (modeRef.current !== "off" && !permissionDeniedRef.current) {
+        window.setTimeout(() => spawnEngine(), 300);
+      }
+    };
 
-    if (shouldArm) startWake();
-    else stopWake();
+    try {
+      rec.start();
+      engineRef.current = rec;
+    } catch {
+      // Another instance was still shutting down — retry shortly.
+      engineRef.current = null;
+      window.setTimeout(() => spawnEngine(), 450);
+    }
+  }, [clearSilence, enterCommand, enterWake, goIdle, releaseMic, stopMeter]);
+
+  // Mic button / orb tap. Switching from wake to command is a flag flip on the SAME
+  // engine, so it reacts on the first click instead of fighting a second recogniser.
+  const toggleListening = useCallback(() => {
+    if (!voiceSupported) {
+      const msg =
+        "Tarayıcın Türkçe sesli dinlemeyi (Web Speech API) desteklemiyor. Chrome veya Edge kullan; yazılı komut her zaman çalışır.";
+      setLastError(msg);
+      toast.error("Mikrofon desteklenmiyor", { description: msg });
+      return;
+    }
+    permissionDeniedRef.current = false;
+    // A deliberate press always wins over the "resume wake after speaking" handoff.
+    pausedForSpeechRef.current = false;
+
+    if (modeRef.current === "command") {
+      // Second tap = "I'm done": submit whatever was captured right now.
+      const said = finalRef.current.trim() || transcript.trim();
+      clearSilence();
+      finalRef.current = "";
+      if (wakeEnabledRef.current) enterWake();
+      else goIdle();
+      if (said) sendRef.current?.(said);
+      return;
+    }
+
+    stopSpeaking();
+    enterCommand();
+    spawnEngine();
   }, [
-    settings?.wake_word_enabled,
+    clearSilence,
+    enterCommand,
+    enterWake,
+    goIdle,
+    spawnEngine,
+    stopSpeaking,
+    transcript,
     voiceSupported,
-    listening,
-    mutation.isPending,
-    orbState,
-    startWake,
-    stopWake,
   ]);
 
-  useEffect(() => stopWake, [stopWake]);
+  // Arm or disarm the wake listener when the setting changes.
+  useEffect(() => {
+    wakeEnabledRef.current = settings?.wake_word_enabled === true;
+    if (!voiceSupported) return;
+
+    if (wakeEnabledRef.current) {
+      if (modeRef.current === "off" && orbState !== "speaking") {
+        enterWake();
+        spawnEngine();
+      }
+    } else if (modeRef.current === "wake") {
+      goIdle();
+    }
+  }, [settings?.wake_word_enabled, voiceSupported, enterWake, goIdle, spawnEngine, orbState]);
+
+  // Never let JARVIS hear its own voice: park the wake listener while it speaks.
+  useEffect(() => {
+    if (orbState === "speaking") {
+      if (modeRef.current === "wake") {
+        pausedForSpeechRef.current = true;
+        modeRef.current = "off";
+        stopEngine();
+        setWakeArmed(false);
+      }
+      return;
+    }
+    if (pausedForSpeechRef.current && wakeEnabledRef.current) {
+      pausedForSpeechRef.current = false;
+      // Only re-arm if nothing else claimed the engine meanwhile. Without this guard a
+      // mic tap during (or right at the end of) a spoken reply gets overwritten back to
+      // wake mode, and the user's press appears to do nothing.
+      if (modeRef.current === "off") {
+        enterWake();
+        spawnEngine();
+      }
+    }
+  }, [orbState, enterWake, spawnEngine, stopEngine]);
+
+  useEffect(
+    () => () => {
+      modeRef.current = "off";
+      clearSilence();
+      stopEngine();
+      releaseMic();
+      stopMeter();
+    },
+    [clearSilence, releaseMic, stopEngine, stopMeter],
+  );
 
   // ----------------------------------------------------------------- media
   const playTrack = useCallback((t: Track) => {
@@ -525,16 +640,12 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
     void apiPost("/media/log", { action: "play", title: t.title }).catch(() => undefined);
   }, []);
 
-  const togglePlay = useCallback(() => {
-    setPlaying((p) => !p);
-  }, []);
+  const togglePlay = useCallback(() => setPlaying((p) => !p), []);
 
   const stopTrack = useCallback(() => {
     setPlaying(false);
     void apiPost("/media/log", { action: "stop", title: track?.title ?? "" }).catch(() => undefined);
   }, [track]);
-
-  useEffect(() => () => stopMeter(), [stopMeter]);
 
   const value: JarvisContextValue = {
     orbState,

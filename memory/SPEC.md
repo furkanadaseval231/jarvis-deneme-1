@@ -57,15 +57,30 @@ Every doc has a string uuid4 `id`; datetimes stored aware UTC, normalised on rea
 ## Autonomous behaviours (phase 2)
 
 ### Wake word — "Hey Jarvis"
-Frontend only, free. `lib/jarvis.tsx` runs a SECOND continuous `SpeechRecognition` stream
-whose only job is matching the wake word. It yields the mic entirely while a command turn,
-an LLM call or TTS playback is active, and respawns itself every ~60s because Chrome ends
-continuous streams. Toggle: `settings.wake_word_enabled` (default off).
-- `matchesWakeWord()` / `stripWakeWord()` are exported and unit-verifiable. The regex
-  `/\b(?:hey|hay|ey|hei)?\s*[jcçg][ae]rv[iı]ss?\b/i` absorbs Turkish ASR spellings
-  (jarvis / carvis / çarvis / jervis / jarvıs) and rejects near-misses like "servis aracı".
-- Trailing words become the command: "Hey Jarvis müziği aç" fires in one breath.
-- Header shows a `wake-word-indicator` pill while armed.
+Frontend only, free.
+
+**ONE SpeechRecognition engine, mode-switched** (`lib/jarvis.tsx`, `modeRef`: off | wake |
+command). This is the critical constraint: a browser allows exactly ONE live recogniser.
+The first implementation ran a separate wake recogniser alongside the command one, so
+`start()` threw `InvalidStateError`, the mic button needed ~3 clicks and the wake word never
+fired. Never reintroduce a second instance — switch `modeRef` instead; wake → command is a
+flag flip on the live engine (no restart, no race, reacts on the first click).
+
+Behaviour:
+- Toggle: `settings.wake_word_enabled`. Header shows `wake-word-indicator` while armed.
+- `matchesWakeWord()` / `stripWakeWord()` are exported and unit-verifiable. Matching runs on
+  a space-collapsed copy, so split ASR output ("jar vis") still lands; variants covered:
+  jarvis / carvis / çarvis / garvis / jervis / jarvıs / jarviz / carwis / jarves.
+  Rejects near-misses: "servis aracı", "kervan", "garanti", "jar dosyası".
+- Trailing words are the command: "Hey Jarvis müziği aç" fires in one breath.
+- Command mode auto-submits after silence (900 ms after a final result, 1800 ms after an
+  interim one). A second mic tap sends immediately.
+- `onend` respawns the engine (Chrome ends continuous streams on silence / ~60 s).
+- While `orbState === "speaking"` the wake listener is parked so JARVIS never hears itself,
+  and re-arms afterwards **only if `modeRef === "off"`** — without that guard a mic tap during
+  a spoken reply gets overwritten back to wake mode and the press appears to do nothing.
+- Verified: 3 consecutive wake turns + 3 consecutive single-click mic turns + a 12-click
+  storm all keep exactly 1 live engine and 1 total engine start; 8/8 commands delivered.
 
 ### Code patch apply (preview → confirm → write)
 `lib/devtools.py`. A proposal NEVER writes: `build_proposal()` reads the file, locates the
@@ -148,6 +163,11 @@ analyser amplitude) — read from `data-orb-state` on `jarvis-orb-container`.
 - Voice features require Chrome/Edge; Playwright/Chromium has no STT engine, so automated
   tests must drive the typed path and assert the TTS endpoint separately. The wake-word
   indicator therefore renders 0 times in headless runs — that is expected, not a bug.
+  To test the voice state machine, inject a fake `window.SpeechRecognition` via
+  `addInitScript` (one that throws if a second instance starts, mirroring the real browser)
+  and assert on the request body sent to `/api/chat`. Stubbing `/api/chat` means messages are
+  never persisted, so do NOT assert on the chat stream in that setup — it reads the real DB.
+  Set `auto_speak:false` during such a run so TTS playback does not muddy the orb states.
 - The morning greeting speaks on the first user gesture, so a test that clicks anything
   before asserting the banner will find it already consumed. Assert it before any click.
 - The Emergent LLM key has a budget cap; when it is exhausted every LLM route returns 502
