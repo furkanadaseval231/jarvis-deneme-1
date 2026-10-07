@@ -10,6 +10,7 @@ import ChatPanel from "@/components/ChatPanel";
 import JarvisOrb from "@/components/JarvisOrb";
 import MediaDock from "@/components/MediaDock";
 import MetricBar from "@/components/MetricBar";
+import MorningGreeting from "@/components/MorningGreeting";
 import Sidebar, { VIEWS } from "@/components/Sidebar";
 import type { ViewId } from "@/components/Sidebar";
 import SidePanels from "@/components/SidePanels";
@@ -50,6 +51,8 @@ export default function Dashboard() {
         <main className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-3 xl:flex-row">
           {/* centre column */}
           <div className="flex min-h-0 flex-1 flex-col">
+            <MorningGreeting onOpenBrief={() => setView("daily_brief")} />
+
             {lastError && (
               <div
                 className="mb-2 flex items-start gap-2 rounded-lg border border-amber-500/35 bg-amber-500/[0.08] px-3 py-2 text-xs text-amber-200"

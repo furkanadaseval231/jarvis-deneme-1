@@ -2,7 +2,7 @@
 // real activity log — plus a speak button so JARVIS reads it out loud.
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { FileText, Loader2, Volume2 } from "lucide-react";
+import { FileText, Loader2, Sunrise, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 
 import Markdown from "@/components/Markdown";
@@ -19,6 +19,29 @@ export default function BriefPanel() {
   const briefings = useQuery({
     queryKey: ["briefings"],
     queryFn: () => apiGet<Briefing[]>("/briefing/latest"),
+  });
+
+  const morning = useQuery({
+    queryKey: ["morning-brief"],
+    queryFn: () => apiGet<Briefing[]>("/briefing/morning"),
+  });
+
+  const makeMorning = useMutation({
+    mutationFn: () => apiPost<Briefing>("/briefing/morning"),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["morning-brief"] });
+      void queryClient.invalidateQueries({ queryKey: ["briefings"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      toast.success("Sabah brifingi hazır");
+      void speak(data.report.slice(0, 1200));
+    },
+    onError: (err) => {
+      const detail =
+        err instanceof ApiError && typeof err.body === "object" && err.body !== null
+          ? String((err.body as { detail?: string }).detail ?? "")
+          : "";
+      toast.error("Sabah brifingi üretilemedi", { description: detail || "Arka uca ulaşamadım." });
+    },
   });
 
   const activities = useQuery({
@@ -44,7 +67,8 @@ export default function BriefPanel() {
     },
   });
 
-  const latest = briefings.data?.[0] ?? null;
+  const latest = briefings.data?.find((b) => b.kind !== "morning") ?? null;
+  const morningBrief = morning.data?.[0] ?? null;
 
   return (
     <section className="thin-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto" data-testid="brief-panel">
@@ -85,6 +109,49 @@ export default function BriefPanel() {
           {generate.isPending ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
           Gün Sonu Raporu Çıkar
         </Button>
+      </div>
+
+      {/* morning brief — produced by the 09:00 cron, or on demand here */}
+      <div className="glass-panel rounded-xl p-3.5" data-testid="morning-brief-card">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <Sunrise size={15} className="text-amber-400" />
+          <span className="mono-label text-amber-400">SABAH BRIFINGI · 09:00</span>
+          <div className="ml-auto flex gap-2">
+            {morningBrief && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void speak(morningBrief.report.slice(0, 1200))}
+                className="gap-1.5 border-amber-500/40 text-amber-200 hover:bg-amber-500/10"
+                data-testid="morning-speak-button"
+              >
+                <Volume2 size={13} /> Sesli Oku
+              </Button>
+            )}
+            <Button
+              size="sm"
+              onClick={() => makeMorning.mutate()}
+              disabled={makeMorning.isPending}
+              className="gap-1.5 bg-amber-500 text-[#201400] hover:bg-amber-400"
+              data-testid="morning-generate-button"
+            >
+              {makeMorning.isPending ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Sunrise size={13} />
+              )}
+              Şimdi Üret
+            </Button>
+          </div>
+        </div>
+        {morningBrief ? (
+          <Markdown text={morningBrief.report} />
+        ) : (
+          <p className="text-xs text-slate-500" data-testid="morning-brief-empty">
+            Bugünün sabah brifingi henüz üretilmedi. Her sabah 09:00'da (İstanbul) sunucuda
+            otomatik hazırlanır — beklemek istemezsen "Şimdi Üret"e bas.
+          </p>
+        )}
       </div>
 
       {latest ? (

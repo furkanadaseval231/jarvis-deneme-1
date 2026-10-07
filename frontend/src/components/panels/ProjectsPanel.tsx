@@ -5,10 +5,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, GitBranch, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+import PatchCard from "@/components/PatchCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
-import type { Project, Task, WorkspaceScan } from "@/lib/types";
+import type { Patch, Project, Task, WorkspaceScan } from "@/lib/types";
 
 export default function ProjectsPanel() {
   const queryClient = useQueryClient();
@@ -19,6 +20,7 @@ export default function ProjectsPanel() {
 
   const projects = useQuery({ queryKey: ["projects"], queryFn: () => apiGet<Project[]>("/projects") });
   const tasks = useQuery({ queryKey: ["tasks"], queryFn: () => apiGet<Task[]>("/tasks") });
+  const patches = useQuery({ queryKey: ["patches"], queryFn: () => apiGet<Patch[]>("/dev/patches") });
 
   const invalidate = (key: string) => {
     void queryClient.invalidateQueries({ queryKey: [key] });
@@ -78,6 +80,7 @@ export default function ProjectsPanel() {
 
   const pending = (tasks.data ?? []).filter((t) => t.status !== "done");
   const done = (tasks.data ?? []).filter((t) => t.status === "done");
+  const pendingPatches = (patches.data ?? []).filter((p) => p.status === "pending");
 
   return (
     <section className="thin-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto" data-testid="projects-panel">
@@ -233,6 +236,30 @@ export default function ProjectsPanel() {
           ))}
           {projects.data?.length === 0 && (
             <p className="text-xs text-slate-500">Henüz kayıt yok. Yukarıdan ekle.</p>
+          )}
+        </div>
+      </div>
+
+      {/* code patches proposed by the Dev Core agent */}
+      <div className="glass-panel rounded-xl p-3" data-testid="patches-card">
+        <div className="mb-2.5 flex items-center justify-between">
+          <span className="mono-label text-violet-400">KOD YAMALARI</span>
+          <span className="text-[0.7rem] text-slate-500">
+            {pendingPatches.length} onay bekliyor · {patches.data?.length ?? 0} toplam
+          </span>
+        </div>
+        <div className="space-y-2" data-testid="patch-list">
+          {(patches.data ?? []).slice(0, 6).map((p) => (
+            <PatchCard key={p.id} patch={p} />
+          ))}
+          {patches.data?.length === 0 && (
+            <p className="text-xs text-slate-500" data-testid="patch-empty">
+              Henüz yama yok. Sohbete bir hata ekran görüntüsü at ya da "şu dosyadaki hatayı
+              düzelt" de — düzeltmeyi diff olarak buraya koyar, onayınla uygular.
+            </p>
+          )}
+          {patches.isError && (
+            <p className="text-xs text-amber-400">Yamalar yüklenemedi — arka uç yanıt vermiyor.</p>
           )}
         </div>
       </div>

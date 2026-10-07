@@ -143,6 +143,63 @@ export default function SettingsPanel() {
           </label>
         </div>
 
+        <div className="space-y-2.5 rounded-lg border border-cyan-500/20 bg-[#050b17]/60 p-3">
+          <div className="mono-label">OTONOM DAVRANIŞLAR</div>
+
+          <label className="flex items-start gap-2.5 text-sm text-slate-300">
+            <Checkbox
+              checked={draft.wake_word_enabled}
+              onCheckedChange={(checked) =>
+                setDraft({ ...draft, wake_word_enabled: checked === true })
+              }
+              className="mt-0.5"
+              data-testid="settings-wake-word"
+            />
+            <span>
+              Uyandırma sözcüğü: “Hey Jarvis”
+              <span className="block text-[0.7rem] text-slate-500">
+                Mikrofon arka planda dinler, sadece adını duyunca komut moduna geçer. Sekmeyi
+                kapatınca durur. Chrome/Edge gerekir.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-2.5 text-sm text-slate-300">
+            <Checkbox
+              checked={draft.morning_brief_enabled}
+              onCheckedChange={(checked) =>
+                setDraft({ ...draft, morning_brief_enabled: checked === true })
+              }
+              className="mt-0.5"
+              data-testid="settings-morning-brief"
+            />
+            <span>
+              Sabah brifingi (09:00)
+              <span className="block text-[0.7rem] text-slate-500">
+                Uygulama kapalıyken bile sunucuda hazırlanır; açtığında seni sesli karşılar.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-2.5 text-sm text-slate-300">
+            <Checkbox
+              checked={draft.commit_watch_enabled}
+              onCheckedChange={(checked) =>
+                setDraft({ ...draft, commit_watch_enabled: checked === true })
+              }
+              className="mt-0.5"
+              data-testid="settings-commit-watch"
+            />
+            <span>
+              Commit izleme
+              <span className="block text-[0.7rem] text-slate-500">
+                İzlenen klasörleri tarar; yeni commit'te bildirim ve akış kaydı düşer. Uygulama
+                açıkken 2 dakikada bir, kapalıyken sunucuda 15 dakikada bir.
+              </span>
+            </span>
+          </label>
+        </div>
+
         <div className="space-y-1.5">
           <Label htmlFor="watch-dirs" className="text-xs text-slate-300">
             İzlenen klasörler (virgülle ayır)

@@ -30,6 +30,9 @@ intent by picking a tool; we execute it for real, then it narrates the result in
 | `not_kaydet` | `research_study` | note persisted |
 | `gun_ozeti` | `executive_briefing` | reads today's real `activities` rows |
 | `sistem_durumu` | `media_os` | real psutil CPU/RAM/disk |
+| `kod_yamasi_oner` | `dev_core` | proposes a real unified diff against a real file (does NOT write) |
+| `commit_tara` | `dev_core` | scans watched dirs for new git commits now |
+| `bildirimleri_oku` | `executive_briefing` | unread notifications |
 
 No tool used → `companion_vision` (chat / image analysis). Images go in as base64
 `ImageContent` on the same Gemini turn.
@@ -51,6 +54,57 @@ and the last 12 turns of this session into the system prompt. Messages persist i
 Every doc has a string uuid4 `id`; datetimes stored aware UTC, normalised on read by
 `lib/activity.clean()`.
 
+## Autonomous behaviours (phase 2)
+
+### Wake word — "Hey Jarvis"
+Frontend only, free. `lib/jarvis.tsx` runs a SECOND continuous `SpeechRecognition` stream
+whose only job is matching the wake word. It yields the mic entirely while a command turn,
+an LLM call or TTS playback is active, and respawns itself every ~60s because Chrome ends
+continuous streams. Toggle: `settings.wake_word_enabled` (default off).
+- `matchesWakeWord()` / `stripWakeWord()` are exported and unit-verifiable. The regex
+  `/\b(?:hey|hay|ey|hei)?\s*[jcçg][ae]rv[iı]ss?\b/i` absorbs Turkish ASR spellings
+  (jarvis / carvis / çarvis / jervis / jarvıs) and rejects near-misses like "servis aracı".
+- Trailing words become the command: "Hey Jarvis müziği aç" fires in one breath.
+- Header shows a `wake-word-indicator` pill while armed.
+
+### Code patch apply (preview → confirm → write)
+`lib/devtools.py`. A proposal NEVER writes: `build_proposal()` reads the file, locates the
+`find` string, renders a unified diff and stores it in `patches` with `status: pending`.
+`POST /dev/patches/{id}/apply` writes the file after copying the original to
+`<file>.bak-YYYYmmdd-HHMMSS`. Guards: target must be under `/app`, never in
+`node_modules`/`.git`/`.venv`/`__pycache__`/`.emergent`, max 400 KB, and apply re-checks that
+`find` is still present (409 + Turkish reason if the file drifted).
+UI: `PatchCard` renders the colourised diff with Uygula / Reddet; appears inline in chat
+(via the `kod_yamasi_oner` action) and listed under Projeler & Kodlama → KOD YAMALARI.
+
+### Morning brief (09:00 Europe/Istanbul)
+Platform cron → `POST /api/cron/morning-brief` (Bearer `WEBHOOK_CRON_SECRET`, acks 202 and
+backgrounds the work, idempotent per webhook run id via the `cron_runs` unique index, and
+skipped if today's morning brief already exists). `build_morning_brief()` uses only real
+data: open projects/courses, pending tasks with due dates, recent activity rows.
+Stored as `Briefing(kind="morning")` + a `morning_brief` notification.
+UI: `MorningGreeting` banner greets on open and speaks the report on the first user gesture
+(browser autoplay policy), then marks `spoken: true` so it greets once per day.
+`POST /api/briefing/morning` is the manual "Şimdi Üret" trigger.
+
+### Commit watching
+`scan_commits()` compares each watched dir's `git rev-parse HEAD` against `repo_state`.
+First sight of a repo only records HEAD — it never floods the feed with pre-existing history.
+New commits create a `commit` notification + a `dev_core` activity row. Idempotent: a second
+scan with no new commits creates nothing.
+Two cadences: the platform cron `*/15 * * * *` covers hours the app is closed (prod discards
+anything under 15 min), and the dashboard itself polls `POST /dev/commits/scan` every 2
+minutes while open. Toggle: `settings.commit_watch_enabled`.
+
+## Cron inventory (`.emergent/crons.yml`)
+| name | schedule | endpoint |
+|---|---|---|
+| morning-brief | `0 9 * * *` Europe/Istanbul | `/api/cron/morning-brief` |
+| commit-watch | `*/15 * * * *` | `/api/cron/commit-watch` |
+
+Both require `Authorization: Bearer $WEBHOOK_CRON_SECRET` (in `backend/.env`), return 202
+immediately and run the job in a background task.
+
 ## Key endpoints (all under /api)
 - `POST /chat`, `GET|DELETE /chat/history`
 - `POST /voice/speak` (mp3), `GET /voice/voices`
@@ -61,6 +115,11 @@ Every doc has a string uuid4 `id`; datetimes stored aware UTC, normalised on rea
 - `GET|POST /tasks`, `PATCH|DELETE /tasks/{id}`
 - `GET|POST /notes`, `DELETE /notes/{id}`, `POST /research`
 - `GET /activities`, `POST /briefing`, `GET /briefing/latest`
+- `GET|POST /briefing/morning`, `POST /briefing/{id}/spoken`
+- `POST /dev/patches`, `GET /dev/patches`, `POST /dev/patches/{id}/apply`, `POST /dev/patches/{id}/reject`
+- `POST /dev/commits/scan`
+- `GET /notifications`, `POST /notifications/{id}/read`, `POST /notifications/read-all`
+- `POST /cron/morning-brief`, `POST /cron/commit-watch` (Bearer secret, 202)
 - `GET|PATCH /settings`
 
 ## UI surfaces (single page, sidebar switches the centre column)
@@ -87,4 +146,12 @@ analyser amplitude) — read from `data-orb-state` on `jarvis-orb-container`.
 - Browser autoplay policy: the first TTS playback needs a prior user gesture; before that the
   orb returns to idle silently instead of throwing.
 - Voice features require Chrome/Edge; Playwright/Chromium has no STT engine, so automated
-  tests must drive the typed path and assert the TTS endpoint separately.
+  tests must drive the typed path and assert the TTS endpoint separately. The wake-word
+  indicator therefore renders 0 times in headless runs — that is expected, not a bug.
+- The morning greeting speaks on the first user gesture, so a test that clicks anything
+  before asserting the banner will find it already consumed. Assert it before any click.
+- The Emergent LLM key has a budget cap; when it is exhausted every LLM route returns 502
+  with a Turkish detail and the UI shows the error banner. Non-LLM features keep working.
+  Symptom in logs: `litellm.RateLimitError: Budget has been exceeded`.
+- `/app/ornek_hata.py` and its `.bak-*` file are a live demo of an applied patch, kept so the
+  patch record in the UI is not dangling.

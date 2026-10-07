@@ -1,11 +1,39 @@
 // Renders the REAL payload of an autonomous agent action inline in the chat stream:
 // flight comparison matrix, web sources, terminal output, git scan, task/note receipts.
 
-import { CheckCircle2, ExternalLink, Music4, Plane, TerminalSquare } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  CheckCircle2,
+  ExternalLink,
+  GitCommitHorizontal,
+  Music4,
+  Plane,
+  TerminalSquare,
+} from "lucide-react";
 
+import PatchCard from "@/components/PatchCard";
 import { Button } from "@/components/ui/button";
+import { apiGet } from "@/lib/api";
 import { useJarvis } from "@/lib/jarvis";
-import type { AgentAction, FlightOption, Track, WebResult } from "@/lib/types";
+import type { AgentAction, FlightOption, Patch, Track, WebResult } from "@/lib/types";
+
+// The proposal lives in the DB, so read it back by id — that way the card reflects the
+// current status (pending → applied) instead of the snapshot frozen in the chat message.
+function PatchRef({ patchId }: { patchId: string }) {
+  const { data } = useQuery({
+    queryKey: ["patches"],
+    queryFn: () => apiGet<Patch[]>("/dev/patches"),
+  });
+  const patch = data?.find((p) => p.id === patchId);
+  if (!patch) {
+    return (
+      <div className="rounded-lg border border-violet-500/25 bg-[#070e1c]/85 px-2.5 py-1.5 text-xs text-slate-400">
+        Yama yükleniyor...
+      </div>
+    );
+  }
+  return <PatchCard patch={patch} />;
+}
 
 function Shell({
   icon,
@@ -182,6 +210,34 @@ export default function ActionResult({ action }: { action: AgentAction }) {
           </div>
         )}
       </Shell>
+    );
+  }
+
+  if (action.tool === "kod_yamasi_oner") {
+    if (p.ok !== true) {
+      return (
+        <div
+          className="rounded-lg border border-rose-500/30 bg-rose-500/[0.07] px-2.5 py-1.5 text-xs text-rose-200"
+          data-testid="action-patch-error"
+        >
+          Yama hazırlanamadı: {String(p.error ?? "bilinmeyen sebep")}
+        </div>
+      );
+    }
+    return <PatchRef patchId={String(p.patch_id ?? "")} />;
+  }
+
+  if (action.tool === "commit_tara") {
+    return (
+      <div
+        className="flex items-center gap-1.5 rounded-lg border border-violet-500/25 bg-violet-500/[0.07] px-2.5 py-1.5 text-xs text-violet-200"
+        data-testid="action-commit-scan"
+      >
+        <GitCommitHorizontal size={13} />
+        {Number(p.new_commits ?? 0) > 0
+          ? `${p.new_commits} yeni commit bulundu (${p.checked} klasör tarandı)`
+          : `Yeni commit yok · ${p.checked ?? 0} klasör tarandı`}
+      </div>
     );
   }
 

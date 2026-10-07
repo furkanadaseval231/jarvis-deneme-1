@@ -44,6 +44,20 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("created_at", DESCENDING)], name="created_desc"),
     ],
     "settings": [IndexModel([("key", ASCENDING)], name="key", unique=True)],
+    "briefings": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("kind", ASCENDING), ("day", DESCENDING)], name="kind_day"),
+    ],
+    "patches": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("status", ASCENDING), ("created_at", DESCENDING)], name="status_created"),
+    ],
+    "notifications": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("read", ASCENDING), ("created_at", DESCENDING)], name="read_created"),
+    ],
+    "repo_state": [IndexModel([("path", ASCENDING)], name="path", unique=True)],
+    "cron_runs": [IndexModel([("key", ASCENDING)], name="key", unique=True)],
 }
 
 

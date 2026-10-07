@@ -223,6 +223,8 @@ class Briefing(BaseModel):
     activity_count: int
     completed_tasks: int
     pending_tasks: int
+    kind: Literal["evening", "morning"] = "evening"
+    spoken: bool = False
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -231,6 +233,9 @@ class Settings(BaseModel):
     voice_enabled: bool = True
     voice: str = "tr-TR-AhmetNeural"
     auto_speak: bool = True
+    wake_word_enabled: bool = False
+    morning_brief_enabled: bool = True
+    commit_watch_enabled: bool = True
     watch_dirs: list[str] = Field(default_factory=lambda: ["/app"])
     rules: str = ""
 
@@ -240,5 +245,49 @@ class SettingsUpdate(BaseModel):
     voice_enabled: Optional[bool] = None
     voice: Optional[str] = None
     auto_speak: Optional[bool] = None
+    wake_word_enabled: Optional[bool] = None
+    morning_brief_enabled: Optional[bool] = None
+    commit_watch_enabled: Optional[bool] = None
     watch_dirs: Optional[list[str]] = None
     rules: Optional[str] = None
+
+
+# ---------------------------------------------------------------- code patches
+class Patch(BaseModel):
+    id: str = Field(default_factory=_uid)
+    path: str
+    find: str
+    replace: str
+    explanation: str = ""
+    diff: str = ""
+    line: int = 0
+    occurrences: int = 1
+    status: Literal["pending", "applied", "rejected", "failed"] = "pending"
+    backup_path: Optional[str] = None
+    error: Optional[str] = None
+    created_at: datetime = Field(default_factory=_now)
+    applied_at: Optional[datetime] = None
+
+
+class PatchCreate(BaseModel):
+    path: str
+    find: str
+    replace: str
+    explanation: str = ""
+
+
+# ---------------------------------------------------------------- notifications
+class Notification(BaseModel):
+    id: str = Field(default_factory=_uid)
+    kind: Literal["commit", "morning_brief", "patch", "system"] = "system"
+    title: str
+    body: str = ""
+    read: bool = False
+    meta: dict = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=_now)
+
+
+class CommitScanResult(BaseModel):
+    checked: int
+    new_commits: int
+    disabled: bool = False

@@ -64,10 +64,12 @@ async def get_status_checks():
 from routers.jarvis import router as jarvis_router
 from routers.agents import router as agents_router
 from routers.workspace import router as workspace_router
+from routers.devtools import router as devtools_router
 
 api_router.include_router(jarvis_router)
 api_router.include_router(agents_router)
 api_router.include_router(workspace_router)
+api_router.include_router(devtools_router)
 
 # Include the router in the main app
 app.include_router(api_router)

@@ -150,6 +150,32 @@ TOOLS = [
         "description": "Gerçek CPU, RAM, disk kullanımı ve çalışan süreç sayısını döner.",
         "parameters": {"type": "object", "properties": {}},
     }},
+    {"type": "function", "function": {
+        "name": "kod_yamasi_oner",
+        "description": (
+            "Bir dosyadaki hatalı kod parçasını düzeltmek için yama ÖNERİR. Dosyayı hemen "
+            "yazmaz; kullanıcıya diff önizlemesi gösterilir ve o onaylarsa uygulanır. "
+            "Kullanıcı bir hatayı düzeltmeni istediğinde veya ekran görüntüsündeki hatayı "
+            "dosyada bulduğunda kullan. Önce terminal_calistir ile dosyayı oku ki 'find' "
+            "alanına dosyadaki metni BİREBİR yazabilsin."
+        ),
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string", "description": "Dosya yolu, /app altında olmalı"},
+            "find": {"type": "string", "description": "Dosyada BİREBİR geçen, değiştirilecek kod parçası"},
+            "replace": {"type": "string", "description": "Yerine yazılacak düzeltilmiş kod"},
+            "explanation": {"type": "string", "description": "Hatanın sebebi ve düzeltmenin mantığı, tek iki cümle"},
+        }, "required": ["path", "find", "replace"]},
+    }},
+    {"type": "function", "function": {
+        "name": "bildirimleri_oku",
+        "description": "Okunmamış bildirimleri (yeni commit'ler, sabah brifingi) döner.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "commit_tara",
+        "description": "İzlenen proje klasörlerini şimdi tarar ve yeni commit var mı bakar.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
 ]
 
 TOOL_AGENT = {
@@ -158,6 +184,9 @@ TOOL_AGENT = {
     "muzik_durdur": ("media_os", "Medya durduruldu"),
     "terminal_calistir": ("dev_core", "Terminal komutu"),
     "proje_tara": ("dev_core", "Proje taraması"),
+    "kod_yamasi_oner": ("dev_core", "Kod yaması önerildi"),
+    "commit_tara": ("dev_core", "Commit taraması"),
+    "bildirimleri_oku": ("executive_briefing", "Bildirimler"),
     "gorev_ekle": ("executive_briefing", "Görev eklendi"),
     "gorev_tamamla": ("executive_briefing", "Görev tamamlandı"),
     "proje_durumu": ("executive_briefing", "Proje durumu"),
@@ -362,6 +391,39 @@ async def dispatch(name: str, args: dict) -> dict:
         if name == "sistem_durumu":
             from lib.metrics import collect_metrics
             return await collect_metrics()
+
+        if name == "kod_yamasi_oner":
+            from lib.devtools import PatchError, build_proposal
+            from models.schemas import Patch
+            try:
+                proposal = build_proposal(
+                    str(args.get("path", "")), str(args.get("find", "")),
+                    str(args.get("replace", "")), str(args.get("explanation", "")),
+                )
+            except PatchError as exc:
+                return {"ok": False, "error": str(exc)}
+            patch = Patch(**proposal)
+            await db.patches.insert_one(patch.model_dump())
+            await log_activity(
+                "dev_core", "patch_propose",
+                f"Yama önerildi: {patch.path.split('/')[-1]}:{patch.line}", patch.explanation,
+            )
+            return {
+                "ok": True, "patch_id": patch.id, "path": patch.path, "line": patch.line,
+                "diff": patch.diff, "explanation": patch.explanation, "status": "pending",
+                "note": "Yama HENÜZ uygulanmadı. Kullanıcı arayüzdeki 'Uygula' butonuna basmalı.",
+            }
+
+        if name == "commit_tara":
+            from lib.devtools import scan_commits
+            return await scan_commits()
+
+        if name == "bildirimleri_oku":
+            rows = await db.notifications.find({"read": False}).sort("created_at", -1).to_list(20)
+            return {"unread": [
+                {"kind": r.get("kind"), "title": r.get("title"), "body": r.get("body")}
+                for r in rows
+            ]}
 
         return {"ok": False, "error": f"Bilinmeyen araç: {name}"}
     except Exception as exc:

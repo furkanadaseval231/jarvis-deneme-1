@@ -24,12 +24,37 @@ interface RecognitionLike {
   interimResults: boolean;
   start: () => void;
   stop: () => void;
+  abort?: () => void;
   onresult: ((e: { resultIndex: number; results: ArrayLike<SpeechResultLike> }) => void) | null;
   onerror: ((e: { error: string }) => void) | null;
   onend: (() => void) | null;
 }
 
 type RecognitionCtor = new () => RecognitionLike;
+
+// Turkish ASR spells the wake word many ways: jarvis / carvis / çarvis / jervis / jarvıs.
+const WAKE_PATTERN = /\b(?:hey|hay|ey|hei)?\s*[jcçg][ae]rv[iı]ss?\b/i;
+
+function normalizeSpeech(text: string): string {
+  return text
+    .toLocaleLowerCase("tr-TR")
+    .replace(/[.,!?;:'"`’]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function matchesWakeWord(text: string): boolean {
+  return WAKE_PATTERN.test(normalizeSpeech(text));
+}
+
+// Everything after the wake word is treated as the command, so "Hey Jarvis müziği aç"
+// works in one breath instead of needing a second turn.
+export function stripWakeWord(text: string): string {
+  const normalized = normalizeSpeech(text);
+  const match = WAKE_PATTERN.exec(normalized);
+  if (!match) return normalized;
+  return normalized.slice(match.index + match[0].length).trim();
+}
 
 function getRecognitionCtor(): RecognitionCtor | null {
   const w = window as unknown as {
@@ -53,6 +78,8 @@ interface JarvisContextValue {
   stopSpeaking: () => void;
   toggleListening: () => void;
   listening: boolean;
+  wakeArmed: boolean;
+  wakeHeard: boolean;
   track: Track | null;
   playing: boolean;
   volume: number;
@@ -78,6 +105,8 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
   const [level, setLevel] = useState(0);
   const [transcript, setTranscript] = useState("");
   const [listening, setListening] = useState(false);
+  const [wakeArmed, setWakeArmed] = useState(false);
+  const [wakeHeard, setWakeHeard] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [track, setTrack] = useState<Track | null>(null);
@@ -86,6 +115,8 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
 
   const queryClient = useQueryClient();
   const recognitionRef = useRef<RecognitionLike | null>(null);
+  const wakeRecRef = useRef<RecognitionLike | null>(null);
+  const wakeWantedRef = useRef(false);
   const micStreamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -388,6 +419,105 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
     else void startListening();
   }, [listening, startListening, stopListening]);
 
+  // ----------------------------------------------------------------- wake word
+  // A second, low-stakes recognition stream runs in the background and only reacts to
+  // "Hey Jarvis". It yields the mic entirely while a command turn or TTS playback is
+  // active, so it never competes with the real listener.
+  const stopWake = useCallback(() => {
+    wakeWantedRef.current = false;
+    const rec = wakeRecRef.current;
+    wakeRecRef.current = null;
+    if (rec) {
+      rec.onend = null;
+      rec.onresult = null;
+      rec.onerror = null;
+      try {
+        (rec.abort ?? rec.stop)();
+      } catch {
+        /* already stopped */
+      }
+    }
+    setWakeArmed(false);
+    setWakeHeard(false);
+  }, []);
+
+  const startWake = useCallback(() => {
+    const Ctor = getRecognitionCtor();
+    if (!Ctor || wakeRecRef.current) return;
+    wakeWantedRef.current = true;
+
+    const spawn = () => {
+      if (!wakeWantedRef.current) return;
+      const rec = new Ctor();
+      rec.lang = "tr-TR";
+      rec.continuous = true;
+      rec.interimResults = true;
+      wakeRecRef.current = rec;
+
+      rec.onresult = (event) => {
+        let heard = "";
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+          heard += event.results[i][0].transcript;
+        }
+        if (!matchesWakeWord(heard)) return;
+
+        const command = stripWakeWord(heard);
+        setWakeHeard(true);
+        stopWake();
+        // Trailing words are the command itself; otherwise open a normal listening turn.
+        if (command.length > 2) {
+          setTranscript(command);
+          sendRef.current?.(command);
+        } else {
+          void startListening();
+        }
+      };
+
+      rec.onerror = (e) => {
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          wakeWantedRef.current = false;
+          setLastError(
+            "Uyandırma sözcüğü için mikrofon izni gerekiyor. Adres çubuğundaki mikrofon simgesinden izin ver.",
+          );
+        }
+      };
+
+      rec.onend = () => {
+        wakeRecRef.current = null;
+        // Chrome ends a continuous stream every ~60s; respawn to stay armed.
+        if (wakeWantedRef.current) window.setTimeout(spawn, 400);
+      };
+
+      try {
+        rec.start();
+        setWakeArmed(true);
+      } catch {
+        wakeRecRef.current = null;
+      }
+    };
+
+    spawn();
+  }, [startListening, stopWake]);
+
+  useEffect(() => {
+    const enabled = settings?.wake_word_enabled === true;
+    const shouldArm =
+      enabled && voiceSupported && !listening && !mutation.isPending && orbState !== "speaking";
+
+    if (shouldArm) startWake();
+    else stopWake();
+  }, [
+    settings?.wake_word_enabled,
+    voiceSupported,
+    listening,
+    mutation.isPending,
+    orbState,
+    startWake,
+    stopWake,
+  ]);
+
+  useEffect(() => stopWake, [stopWake]);
+
   // ----------------------------------------------------------------- media
   const playTrack = useCallback((t: Track) => {
     setTrack(t);
@@ -420,6 +550,8 @@ export function JarvisProvider({ children }: { children: ReactNode }) {
     stopSpeaking,
     toggleListening,
     listening,
+    wakeArmed,
+    wakeHeard,
     track,
     playing,
     volume,

@@ -1,0 +1,16 @@
+crons:
+  - name: morning-brief
+    description: "Her sabah 09:00'da (İstanbul) günün teslimlerini ve ilk işini derleyip sabah brifingi hazırlar"
+    cron: "0 9 * * *"
+    timezone: "Europe/Istanbul"
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    endpoint: "{{BASE_URL}}/api/cron/morning-brief"
+    method: POST
+    enabled: true
+  - name: commit-watch
+    description: "İzlenen proje klasörlerini tarar, yeni git commit bulursa bildirim ve akış kaydı olusturur"
+    cron: "*/15 * * * *"
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    endpoint: "{{BASE_URL}}/api/cron/commit-watch"
+    method: POST
+    enabled: true

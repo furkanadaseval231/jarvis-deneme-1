@@ -137,6 +137,8 @@ export interface Briefing {
   activity_count: number;
   completed_tasks: number;
   pending_tasks: number;
+  kind: "evening" | "morning";
+  spoken: boolean;
   created_at: string;
 }
 
@@ -145,8 +147,43 @@ export interface Settings {
   voice_enabled: boolean;
   voice: string;
   auto_speak: boolean;
+  wake_word_enabled: boolean;
+  morning_brief_enabled: boolean;
+  commit_watch_enabled: boolean;
   watch_dirs: string[];
   rules: string;
+}
+
+export interface Patch {
+  id: string;
+  path: string;
+  find: string;
+  replace: string;
+  explanation: string;
+  diff: string;
+  line: number;
+  occurrences: number;
+  status: "pending" | "applied" | "rejected" | "failed";
+  backup_path: string | null;
+  error: string | null;
+  created_at: string;
+  applied_at: string | null;
+}
+
+export interface Notification {
+  id: string;
+  kind: "commit" | "morning_brief" | "patch" | "system";
+  title: string;
+  body: string;
+  read: boolean;
+  meta: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface CommitScanResult {
+  checked: number;
+  new_commits: number;
+  disabled: boolean;
 }
 
 export interface WorkspaceScan {
